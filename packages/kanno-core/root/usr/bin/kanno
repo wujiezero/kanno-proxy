@@ -35,7 +35,7 @@ start_kernel() {
             log_error "mihomo not found, run: kanno update mihomo"
             return 1
         fi
-        "$MIHOMO_BIN" -d "$(dirname "$MIHOMO_CFG")" -f "$MIHOMO_CFG" &
+        "$MIHOMO_BIN" -d "$GEODATA_DIR" -f "$MIHOMO_CFG" &
         echo $! > "$MIHOMO_PID"
         log_info "mihomo started (pid $!)"
         ;;

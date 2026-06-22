@@ -146,8 +146,9 @@ download_critical() {
 step "Downloading core scripts..."
 CORE="packages/kanno-core/root"
 
-download_critical "$CORE/usr/lib/kanno/common.sh"      /usr/lib/kanno/common.sh     755
-download_critical "$CORE/usr/lib/kanno/uri_parser.sh"  /usr/lib/kanno/uri_parser.sh  755
+download_critical "$CORE/usr/lib/kanno/common.sh"       /usr/lib/kanno/common.sh       755
+download_critical "$CORE/usr/lib/kanno/capabilities.sh" /usr/lib/kanno/capabilities.sh 755
+download_critical "$CORE/usr/lib/kanno/uri_parser.sh"   /usr/lib/kanno/uri_parser.sh   755
 download_critical "$CORE/usr/lib/kanno/gen_mihomo.sh"  /usr/lib/kanno/gen_mihomo.sh  755
 download_critical "$CORE/usr/lib/kanno/gen_singbox.sh" /usr/lib/kanno/gen_singbox.sh 755
 download_critical "$CORE/usr/lib/kanno/nftables.sh"    /usr/lib/kanno/nftables.sh    755

@@ -201,6 +201,12 @@ kanno_stop() {
     unload_nftables
     teardown_routing
     stop_kernel
+    # Clean up TUN data-plane leftovers in case the kernel was killed before it
+    # could remove its own auto-route/auto-redirect state (nft table + iface).
+    nft delete table inet mihomo 2>/dev/null
+    nft delete table inet sing-box 2>/dev/null
+    ip link del Meta 2>/dev/null
+    ip link del Kanno 2>/dev/null
     log_info "KannoProxy stopped"
 }
 

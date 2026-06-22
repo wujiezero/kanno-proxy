@@ -59,6 +59,11 @@ killall mihomo sing-box 2>/dev/null
 sleep 1
 killall -9 mihomo sing-box 2>/dev/null
 nft delete table inet kanno 2>/dev/null && info "nftables table removed"
+# TUN data-plane leftovers (auto-redirect tables + virtual interfaces)
+nft delete table inet mihomo 2>/dev/null
+nft delete table inet sing-box 2>/dev/null
+ip link del Meta 2>/dev/null
+ip link del Kanno 2>/dev/null
 ip rule del fwmark 0x200 table 100 2>/dev/null
 ip route del local default dev lo table 100 2>/dev/null
 

@@ -11,14 +11,37 @@ GEODATA_REPO="Loyalsoldier/v2ray-rules-dat"
 # Print progress to both terminal and log
 progress() { printf '\033[0;36m[→]\033[0m %s\n' "$*"; echo "[STEP]  $*" >> "$KANNO_LOG"; }
 
+# Map the running target to the release asset arch token shared by BOTH
+# mihomo (mihomo-<arch>-vX.gz) and sing-box (sing-box-X-<arch>.tar.gz).
+# Prefer OpenWrt's precise DISTRIB_ARCH (e.g. arm_cortex-a7_neon-vfpv4,
+# mipsel_24kc); fall back to uname -m for non-OpenWrt hosts.
 detect_arch() {
+    local da
+    da=$(. /etc/openwrt_release 2>/dev/null; echo "$DISTRIB_ARCH")
+    case "$da" in
+        x86_64)                  echo "linux-amd64";            return ;;
+        i386*|i486*|i586*|i686*) echo "linux-386";              return ;;
+        aarch64*)                echo "linux-arm64";            return ;;
+        # ARM with a hardware FPU (neon/vfp, all Cortex-A) → armv7; older → armv5
+        arm_*neon*|arm_*vfp*|arm_cortex-a*) echo "linux-armv7"; return ;;
+        arm_*)                   echo "linux-armv5";            return ;;
+        mipsel_*)                echo "linux-mipsle-softfloat"; return ;;
+        mips_*)                  echo "linux-mips-softfloat";   return ;;
+        mips64el_*)              echo "linux-mips64le";         return ;;
+        mips64_*)                echo "linux-mips64";           return ;;
+    esac
     case "$(uname -m)" in
-    aarch64)       echo "linux-arm64" ;;
-    armv7l|armv6l) echo "linux-armv7" ;;
-    x86_64)        echo "linux-amd64" ;;
-    mips)          echo "linux-mips-softfloat" ;;
-    mipsle)        echo "linux-mipsle-softfloat" ;;
-    *)             echo "linux-amd64" ;;
+        aarch64|arm64)  echo "linux-arm64" ;;
+        armv7*)         echo "linux-armv7" ;;
+        armv6*)         echo "linux-armv6" ;;
+        armv5*)         echo "linux-armv5" ;;
+        x86_64|amd64)   echo "linux-amd64" ;;
+        i?86)           echo "linux-386" ;;
+        mips64el)       echo "linux-mips64le" ;;
+        mips64)         echo "linux-mips64" ;;
+        mipsel|mipsle)  echo "linux-mipsle-softfloat" ;;
+        mips)           echo "linux-mips-softfloat" ;;
+        *)              echo "linux-amd64" ;;
     esac
 }
 
@@ -166,9 +189,7 @@ update_mihomo() {
 update_singbox() {
     local arch
     arch=$(detect_arch)
-    local libc
-    libc=$(detect_libc)
-    progress "Checking latest sing-box release... (arch: $arch, libc: $libc)"
+    progress "Checking latest sing-box release... (arch: $arch)"
 
     local tag
     tag=$(get_latest_release "$SINGBOX_REPO")
@@ -179,7 +200,9 @@ update_singbox() {
     progress "Latest sing-box: $tag"
 
     local url
-    url=$(get_download_url "$SINGBOX_REPO" "$tag" "${arch}-${libc}\.tar\.gz" | head -1)
+    # sing-box assets are sing-box-<ver>-<arch>.tar.gz (statically linked Go
+    # binary, so there is no glibc/musl variant to choose).
+    url=$(get_download_url "$SINGBOX_REPO" "$tag" "${arch}\.tar\.gz" | head -1)
     [ -z "$url" ] && url=$(get_download_url "$SINGBOX_REPO" "$tag" "sing-box-.*-${arch}\.tar\.gz" | head -1)
     if [ -z "$url" ]; then
         log_error "No sing-box binary found for arch: $arch (tag: $tag)"

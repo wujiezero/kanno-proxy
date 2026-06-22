@@ -121,27 +121,53 @@ return view.extend({
 		});
 	},
 
-	handleTest: function (id) {
+	_setTesting: function (id) {
 		var card = document.querySelector('.kanno-node[data-id="' + id + '"]');
 		var latEl = card && card.querySelector('.kanno-lat');
 		if (latEl) { latEl.className = 'kanno-lat kanno-lat-none'; latEl.textContent = '…'; }
+	},
+
+	_applyLatency: function (id, ok, latency) {
+		var card = document.querySelector('.kanno-node[data-id="' + id + '"]');
+		var latEl = card && card.querySelector('.kanno-lat');
+		if (!latEl) return;
+		if (ok && latency != null) {
+			latEl.className = 'kanno-lat ' + latClass(latency);
+			latEl.textContent = latency + 'ms';
+		} else {
+			latEl.className = 'kanno-lat kanno-lat-bad';
+			latEl.textContent = _('timeout');
+		}
+	},
+
+	handleTest: function (id) {
+		var self = this;
+		this._setTesting(id);
 		return api.call('test_node', { id: id }).then(function (r) {
-			if (!latEl) return;
-			if (r && r.ok) {
-				latEl.className = 'kanno-lat ' + latClass(r.latency);
-				latEl.textContent = r.latency + 'ms';
-			} else {
-				latEl.className = 'kanno-lat kanno-lat-bad';
-				latEl.textContent = _('timeout');
-			}
+			self._applyLatency(id, r && r.ok, r && r.latency);
 		});
 	},
 
 	handleTestAll: function () {
 		var self = this;
-		return api.call('test_all_nodes').then(function () {
-			notify(E('p', _('Latency test finished')), 3000);
-			return self.reload();
+		var cards = document.querySelectorAll('.kanno-node[data-id]');
+		var ids = [];
+		for (var i = 0; i < cards.length; i++) {
+			var id = cards[i].getAttribute('data-id');
+			ids.push(id);
+			self._setTesting(id);
+		}
+		// Test sequentially, updating each card's badge as its result arrives.
+		var chain = Promise.resolve();
+		ids.forEach(function (id) {
+			chain = chain.then(function () {
+				return api.call('test_node', { id: id }).then(function (r) {
+					self._applyLatency(id, r && r.ok, r && r.latency);
+				});
+			});
+		});
+		return chain.then(function () {
+			notify(E('p', _('Latency test finished')), 2500);
 		});
 	},
 

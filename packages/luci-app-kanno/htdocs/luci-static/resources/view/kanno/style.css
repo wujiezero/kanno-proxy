@@ -82,6 +82,13 @@
 .kanno-pill-on  { background: rgba(0, 172, 89, .12); color: #00ac59; }
 .kanno-pill-off { background: rgba(246, 43, 18, .1); color: #f62b12; }
 .kanno-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.kanno-active-node {
+	display: inline-flex; align-items: center; gap: 4px;
+	padding: 4px 12px; border-radius: 6px;
+	background: rgba(99, 102, 241, .1); font-size: 13px;
+}
+.kanno-active-label { color: var(--text-color-low, #8a8a8a); font-weight: 500; }
+.kanno-active-name { color: #6366f1; font-weight: 600; }
 .kanno-pill-on .kanno-dot { animation: kanno-pulse 2s infinite; }
 @keyframes kanno-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 

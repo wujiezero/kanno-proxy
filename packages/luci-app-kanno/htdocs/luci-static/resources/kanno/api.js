@@ -323,20 +323,24 @@ function getLogs(p) {
 
 /* ── Traffic (mihomo connections API) ──────────── */
 function getTraffic() {
-	return out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/connections'])
-		.then(function (s) {
-			try {
-				var o = JSON.parse(s);
-				return {
-					up: o.uploadTotal || 0,
-					down: o.downloadTotal || 0,
-					conns: Array.isArray(o.connections) ? o.connections.length : 0,
-					mem: o.memory || 0
-				};
-			} catch (e) {
-				return { up: 0, down: 0, conns: 0, mem: 0 };
-			}
-		});
+	return Promise.all([
+		out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/connections']),
+		out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/proxies/PROXY'])
+	]).then(function (a) {
+		var traffic = { up: 0, down: 0, conns: 0, mem: 0, activeNode: '' };
+		try {
+			var o = JSON.parse(a[0]);
+			traffic.up = o.uploadTotal || 0;
+			traffic.down = o.downloadTotal || 0;
+			traffic.conns = Array.isArray(o.connections) ? o.connections.length : 0;
+			traffic.mem = o.memory || 0;
+		} catch (e) {}
+		try {
+			var p = JSON.parse(a[1]);
+			traffic.activeNode = p.now || '';
+		} catch (e) {}
+		return traffic;
+	});
 }
 
 /* ── Access check ──────────────────────────────── */

@@ -56,7 +56,7 @@ return view.extend({
 		]);
 	},
 
-	statusInner: function (s) {
+	statusInner: function (s, activeNode) {
 		s = s || {};
 		var running = !!s.running;
 		return [
@@ -64,6 +64,10 @@ return view.extend({
 				E('span', { 'class': 'kanno-dot' }), running ? _('Running') : _('Stopped')
 			]),
 			s.version ? E('span', { 'class': 'kanno-muted' }, s.version) : '',
+			(running && activeNode) ? E('span', { 'class': 'kanno-active-node' }, [
+				E('span', { 'class': 'kanno-active-label' }, _('Active: ')),
+				E('span', { 'class': 'kanno-active-name' }, activeNode)
+			]) : '',
 			E('div', { 'class': 'kanno-actions' }, [
 				E('button', {
 					'class': 'cbi-button cbi-button-save important',
@@ -132,7 +136,7 @@ return view.extend({
 
 		var statusCard = E('div', { 'class': 'kanno-card' }, [
 			E('div', { 'class': 'kanno-card-title' }, _('Service Status')),
-			E('div', { 'id': 'kanno-status', 'class': 'kanno-row' }, this.statusInner(s))
+			E('div', { 'id': 'kanno-status', 'class': 'kanno-row' }, this.statusInner(s, traffic.activeNode))
 		]);
 
 		var trafficGrid = E('div', { 'id': 'kanno-traffic', 'class': 'kanno-grid' },
@@ -248,7 +252,7 @@ return view.extend({
 				L.resolveDefault(api.call('get_traffic'), {})
 			]).then(L.bind(function (r) {
 				var el = document.getElementById('kanno-status');
-				if (el) dom.content(el, this.statusInner(r[0]));
+				if (el) dom.content(el, this.statusInner(r[0], r[1].activeNode));
 				var tel = document.getElementById('kanno-traffic');
 				if (tel) dom.content(tel, this.trafficInner(r[1]));
 			}, this));

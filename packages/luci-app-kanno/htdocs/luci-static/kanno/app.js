@@ -3,6 +3,7 @@
 function kannoApp() {
   return {
     page: 'dashboard',
+    inIframe: window.self !== window.top,
     status: { running: false, kernel: 'mihomo', version: '', connections: 0 },
     nodes: [],
     groups: [],

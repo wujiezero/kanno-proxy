@@ -427,7 +427,9 @@
 <div class="toast" x-show="toast.show" x-transition x-text="toast.msg"
   :class="toast.ok ? 'toast-ok' : 'toast-err'"></div>
 
-<script src="alpine.min.js" defer></script>
+<!-- app.js must come BEFORE alpine.min.js so kannoApp() is defined
+     before Alpine initialises and scans x-data directives.      -->
 <script src="app.js" defer></script>
+<script src="alpine.min.js" defer></script>
 </body>
 </html>

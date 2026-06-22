@@ -26,6 +26,9 @@ function kannoApp() {
     toast: { show: false, msg: '', ok: true },
 
     async init() {
+      // Alpine.js v3: set up $watch inside init() — the external
+      // _x_dataStack hack used below does not work with Alpine v3.
+      this.$watch('page', (newPage) => this.onPageChange(newPage));
       await Promise.all([this.fetchStatus(), this.fetchNodes()]);
       setInterval(() => this.fetchStatus(), 5000);
     },
@@ -281,8 +284,8 @@ function kannoApp() {
       }
     },
 
-    // Page load hooks
-    async $watch_page(newPage) {
+    // Reload page-specific data whenever the active page changes
+    async onPageChange(newPage) {
       switch (newPage) {
         case 'nodes':   await this.fetchNodes(); break;
         case 'groups':  await this.loadGroups(); break;
@@ -294,15 +297,3 @@ function kannoApp() {
     },
   };
 }
-
-// Watch page changes after Alpine initializes
-document.addEventListener('alpine:init', () => {
-  // Alpine 3.x: use $watch inside x-init instead
-});
-
-document.addEventListener('alpine:initialized', () => {
-  const el = document.querySelector('[x-data]');
-  if (!el || !el._x_dataStack) return;
-  const comp = el._x_dataStack[0];
-  comp.$watch('page', (newPage) => comp.$watch_page(newPage));
-});

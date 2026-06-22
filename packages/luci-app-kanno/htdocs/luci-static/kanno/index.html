@@ -427,9 +427,12 @@
 <div class="toast" x-show="toast.show" x-transition x-text="toast.msg"
   :class="toast.ok ? 'toast-ok' : 'toast-err'"></div>
 
-<!-- app.js must come BEFORE alpine.min.js so kannoApp() is defined
-     before Alpine initialises and scans x-data directives.      -->
-<script src="app.js" defer></script>
+<!-- app.js: NO defer — runs synchronously so kannoApp() is defined
+     before Alpine.js (defer) ever calls Alpine.start().
+     Alpine CDN v3 calls Alpine.start() synchronously at the end of
+     its own script; two defer scripts in the wrong microtask order
+     can still race. Loading app.js without defer eliminates the race. -->
+<script src="app.js"></script>
 <script src="alpine.min.js" defer></script>
 </body>
 </html>

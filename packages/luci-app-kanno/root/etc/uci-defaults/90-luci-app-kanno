@@ -1,0 +1,7 @@
+#!/bin/sh
+# First-boot init for KannoProxy LuCI app
+
+# Reload uhttpd so it picks up new routes
+/etc/init.d/uhttpd reload 2>/dev/null || true
+/etc/init.d/rpcd reload 2>/dev/null || true
+exit 0

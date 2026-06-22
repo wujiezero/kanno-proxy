@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KannoProxy</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body x-data="kannoApp()" x-init="init()">
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="logo">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+    </svg>
+    <span>KannoProxy</span>
+  </div>
+
+  <div class="status-badge" :class="status.running ? 'running' : 'stopped'">
+    <span class="dot"></span>
+    <span x-text="status.running ? '运行中' : '已停止'"></span>
+  </div>
+
+  <ul class="nav-list">
+    <li><a href="#" @click.prevent="page='dashboard'" :class="{active: page==='dashboard'}">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      仪表盘
+    </a></li>
+    <li><a href="#" @click.prevent="page='nodes'" :class="{active: page==='nodes'}">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v10M6 17h12M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm12 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+      节点管理
+    </a></li>
+    <li><a href="#" @click.prevent="page='groups'" :class="{active: page==='groups'}">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      代理分组
+    </a></li>
+    <li><a href="#" @click.prevent="page='rules'" :class="{active: page==='rules'}">
+      <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      路由规则
+    </a></li>
+    <li><a href="#" @click.prevent="page='dns'" :class="{active: page==='dns'}">
+      <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      DNS 设置
+    </a></li>
+    <li><a href="#" @click.prevent="page='kernel'" :class="{active: page==='kernel'}">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      内核管理
+    </a></li>
+    <li><a href="#" @click.prevent="page='logs'" :class="{active: page==='logs'}">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      运行日志
+    </a></li>
+  </ul>
+
+  <div class="sidebar-actions">
+    <button class="btn btn-primary btn-sm" @click="doStart()" x-show="!status.running" :disabled="actionPending">启动</button>
+    <button class="btn btn-danger btn-sm" @click="doStop()" x-show="status.running" :disabled="actionPending">停止</button>
+    <button class="btn btn-ghost btn-sm" @click="doRestart()" :disabled="actionPending">重启</button>
+  </div>
+</nav>
+
+<!-- Main content -->
+<main class="content">
+
+  <!-- Dashboard -->
+  <div x-show="page==='dashboard'">
+    <div class="page-header"><h1>仪表盘</h1></div>
+    <div class="cards-grid">
+      <div class="card stat-card">
+        <div class="stat-icon" :class="status.running ? 'green' : 'red'">
+          <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <div class="stat-body">
+          <div class="stat-value" x-text="status.running ? '运行中' : '已停止'"></div>
+          <div class="stat-label">服务状态</div>
+        </div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon blue">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+        </div>
+        <div class="stat-body">
+          <div class="stat-value" x-text="status.kernel || 'mihomo'"></div>
+          <div class="stat-label">当前内核</div>
+        </div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon indigo">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        </div>
+        <div class="stat-body">
+          <div class="stat-value" x-text="nodes.length"></div>
+          <div class="stat-label">节点数量</div>
+        </div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon amber">
+          <svg viewBox="0 0 24 24"><path d="M8 12h8M12 8l4 4-4 4"/></svg>
+        </div>
+        <div class="stat-body">
+          <div class="stat-value" x-text="status.connections || 0"></div>
+          <div class="stat-label">连接数</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick add -->
+    <div class="card">
+      <div class="card-title">快速添加节点</div>
+      <div class="input-row">
+        <input class="input" type="text" x-model="quickUri"
+          placeholder="粘贴节点 URI：vless:// vmess:// trojan:// ss:// hy2:// tuic://"
+          @keydown.enter="quickAdd()">
+        <button class="btn btn-primary" @click="quickAdd()" :disabled="!quickUri">添加</button>
+      </div>
+      <div class="msg" x-show="quickMsg" x-text="quickMsg" :class="quickMsgOk ? 'msg-ok' : 'msg-err'"></div>
+    </div>
+
+    <!-- Version -->
+    <div class="card" x-show="status.version">
+      <div class="card-title">版本信息</div>
+      <code x-text="status.version" style="font-size:12px;color:var(--text-2)"></code>
+    </div>
+  </div>
+
+  <!-- Nodes -->
+  <div x-show="page==='nodes'">
+    <div class="page-header">
+      <h1>节点管理</h1>
+      <button class="btn btn-primary" @click="showAddNode=true">+ 添加节点</button>
+    </div>
+
+    <!-- Add node modal -->
+    <div class="modal-overlay" x-show="showAddNode" @click.self="showAddNode=false">
+      <div class="modal">
+        <div class="modal-title">添加代理节点</div>
+        <textarea class="input textarea" x-model="addUri" rows="4"
+          placeholder="粘贴节点 URI&#10;支持：vless:// vmess:// trojan:// ss:// hy2:// tuic:// naive+https://&#10;&#10;每行一个可批量导入"></textarea>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" @click="showAddNode=false">取消</button>
+          <button class="btn btn-primary" @click="doAddNode()" :disabled="!addUri">确认添加</button>
+        </div>
+        <div class="msg" x-show="addMsg" x-text="addMsg" :class="addMsgOk ? 'msg-ok' : 'msg-err'"></div>
+      </div>
+    </div>
+
+    <!-- Node list -->
+    <div class="card" x-show="nodes.length===0">
+      <div class="empty">暂无节点，点击上方按钮添加</div>
+    </div>
+
+    <div class="node-list">
+      <template x-for="n in nodes" :key="n.id">
+        <div class="node-card" :class="{disabled: !n.enabled}">
+          <div class="node-header">
+            <span class="protocol-badge" :class="'proto-'+n.type" x-text="n.type.toUpperCase()"></span>
+            <span class="node-name" x-text="n.name"></span>
+            <span class="latency-badge" :class="latencyClass(n.latency)" x-text="n.latency ? n.latency+'ms' : '—'"></span>
+          </div>
+          <div class="node-addr" x-text="n.server + ':' + n.port"></div>
+          <div class="node-meta">
+            <span x-text="n.security !== 'none' ? n.security : 'no-tls'"></span>
+            <span x-text="n.transport || 'tcp'"></span>
+          </div>
+          <div class="node-actions">
+            <button class="btn-icon" @click="doTestNode(n)" title="测速">
+              <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            </button>
+            <button class="btn-icon" @click="doToggleNode(n)" :title="n.enabled ? '禁用' : '启用'">
+              <svg viewBox="0 0 24 24" x-show="n.enabled"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+              <svg viewBox="0 0 24 24" x-show="!n.enabled"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+            </button>
+            <button class="btn-icon danger" @click="doDelNode(n)" title="删除">
+              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            </button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="card" x-show="nodes.length>0" style="margin-top:8px">
+      <button class="btn btn-ghost" @click="doTestAll()">全部测速</button>
+    </div>
+  </div>
+
+  <!-- Groups -->
+  <div x-show="page==='groups'">
+    <div class="page-header"><h1>代理分组</h1><button class="btn btn-primary" @click="addGroup()">+ 新建分组</button></div>
+    <div class="card" x-show="groups.length===0"><div class="empty">暂无分组</div></div>
+    <template x-for="(g, gi) in groups" :key="g.id||gi">
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+          <div class="form-group" style="flex:1;min-width:140px">
+            <label>分组名称</label>
+            <input class="input" x-model="g.name">
+          </div>
+          <div class="form-group" style="flex:1;min-width:120px">
+            <label>类型</label>
+            <select class="input" x-model="g.type">
+              <option value="url-test">URL Test（自动测速）</option>
+              <option value="fallback">Fallback（故障切换）</option>
+              <option value="load-balance">负载均衡</option>
+              <option value="select">手动选择</option>
+            </select>
+          </div>
+          <div class="form-group" style="min-width:80px">
+            <label>间隔(s)</label>
+            <input class="input" type="number" x-model.number="g.interval">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>节点列表（从下方选择）</label>
+          <div class="tag-list">
+            <template x-for="p in g.proxies" :key="p">
+              <span class="tag">
+                <span x-text="p"></span>
+                <button @click="g.proxies.splice(g.proxies.indexOf(p),1)">&times;</button>
+              </span>
+            </template>
+            <select class="input-sm" @change="addProxyToGroup(g, $event.target.value); $event.target.value=''">
+              <option value="">+ 添加节点</option>
+              <template x-for="n in nodes" :key="n.id">
+                <option :value="n.name" x-text="n.name"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn btn-danger btn-sm" @click="groups.splice(gi,1)">删除</button>
+        </div>
+      </div>
+    </template>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-primary" @click="saveGroups()">保存分组</button>
+    </div>
+    <div class="msg" x-show="groupMsg" x-text="groupMsg" :class="groupMsgOk?'msg-ok':'msg-err'"></div>
+  </div>
+
+  <!-- Rules -->
+  <div x-show="page==='rules'">
+    <div class="page-header"><h1>路由规则</h1></div>
+    <div class="cards-grid" style="grid-template-columns:1fr 1fr">
+      <div class="card">
+        <div class="card-title">🌐 全局设置</div>
+        <div class="form-group">
+          <label>GeoSite CN 策略</label>
+          <select class="input" x-model="rules.geosite_cn">
+            <option value="DIRECT">直连</option>
+            <option value="PROXY">代理</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>GeoIP CN 策略</label>
+          <select class="input" x-model="rules.geoip_cn">
+            <option value="DIRECT">直连</option>
+            <option value="PROXY">代理</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>默认策略（匹配不到时）</label>
+          <select class="input" x-model="rules.default_policy">
+            <option value="PROXY">代理</option>
+            <option value="DIRECT">直连</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">ℹ️ 规则说明</div>
+        <ul class="tips">
+          <li>强制代理 &gt; 强制直连 &gt; GeoSite/GeoIP &gt; 默认策略</li>
+          <li>每行一条：域名后缀、完整域名、或 CIDR</li>
+          <li>LAN 地址（192.168.x.x 等）始终直连</li>
+          <li>修改后需点击保存并重启生效</li>
+        </ul>
+      </div>
+    </div>
+    <div class="cards-grid" style="grid-template-columns:1fr 1fr">
+      <div class="card">
+        <div class="card-title">🚀 强制代理</div>
+        <textarea class="input textarea" x-model="rules.force_proxy_text" rows="10"
+          placeholder="每行一条&#10;示例：&#10;google.com&#10;8.8.8.8/32&#10;*.googleapis.com"></textarea>
+      </div>
+      <div class="card">
+        <div class="card-title">🏠 强制直连</div>
+        <textarea class="input textarea" x-model="rules.force_direct_text" rows="10"
+          placeholder="每行一条&#10;示例：&#10;localserver.home&#10;192.168.100.0/24"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-primary" @click="saveRules()">保存规则</button>
+    </div>
+    <div class="msg" x-show="rulesMsg" x-text="rulesMsg" :class="rulesMsgOk?'msg-ok':'msg-err'"></div>
+  </div>
+
+  <!-- DNS -->
+  <div x-show="page==='dns'">
+    <div class="page-header"><h1>DNS 设置</h1></div>
+    <div class="card">
+      <div class="form-group">
+        <label>DNS 模式</label>
+        <select class="input" x-model="dns.mode">
+          <option value="fake-ip">Fake IP（推荐，防 DNS 污染）</option>
+          <option value="redir-host">Redir Host（兼容模式）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>本地监听端口</label>
+        <input class="input" type="number" x-model.number="dns.listen_port">
+      </div>
+      <div class="cards-grid" style="grid-template-columns:1fr 1fr;margin-top:0">
+        <div class="form-group">
+          <label>国内 DNS（直连查询）</label>
+          <textarea class="input textarea" x-model="dns.domestic_text" rows="4"
+            placeholder="每行一个&#10;114.114.114.114&#10;223.5.5.5"></textarea>
+        </div>
+        <div class="form-group">
+          <label>境外 DNS（走代理查询）</label>
+          <textarea class="input textarea" x-model="dns.foreign_text" rows="4"
+            placeholder="每行一个&#10;8.8.8.8&#10;1.1.1.1"></textarea>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-primary" @click="saveDns()">保存 DNS</button>
+    </div>
+    <div class="msg" x-show="dnsMsg" x-text="dnsMsg" :class="dnsMsgOk?'msg-ok':'msg-err'"></div>
+  </div>
+
+  <!-- Kernel -->
+  <div x-show="page==='kernel'">
+    <div class="page-header"><h1>内核管理</h1></div>
+
+    <!-- Global settings -->
+    <div class="card">
+      <div class="card-title">全局设置</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:140px">
+          <label>当前内核</label>
+          <select class="input" x-model="global.kernel">
+            <option value="mihomo">mihomo（推荐）</option>
+            <option value="singbox">sing-box</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1;min-width:120px">
+          <label>代理模式</label>
+          <select class="input" x-model="global.mode">
+            <option value="rule">规则模式</option>
+            <option value="global">全局代理</option>
+            <option value="direct">全部直连</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1;min-width:100px">
+          <label>日志级别</label>
+          <select class="input" x-model="global.log_level">
+            <option value="silent">Silent</option>
+            <option value="error">Error</option>
+            <option value="warning">Warning</option>
+            <option value="info">Info</option>
+            <option value="debug">Debug</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:8px" @click="saveGlobal()">保存设置</button>
+      <div class="msg" x-show="globalMsg" x-text="globalMsg" :class="globalMsgOk?'msg-ok':'msg-err'"></div>
+    </div>
+
+    <!-- Kernel cards -->
+    <div class="cards-grid">
+      <div class="card kernel-card">
+        <div class="kernel-icon mihomo-icon">M</div>
+        <div class="kernel-name">mihomo</div>
+        <div class="kernel-ver" x-text="kernels.mihomo?.version || '未安装'"></div>
+        <div class="kernel-status" :class="kernels.mihomo?.installed ? 'ok' : 'na'"
+          x-text="kernels.mihomo?.installed ? '已安装' : '未安装'"></div>
+        <div class="kernel-actions">
+          <button class="btn btn-primary btn-sm" @click="updateKernel('mihomo')" :disabled="updatePending">
+            <span x-text="updatePending==='mihomo' ? '更新中...' : '在线更新'"></span>
+          </button>
+        </div>
+      </div>
+      <div class="card kernel-card">
+        <div class="kernel-icon singbox-icon">S</div>
+        <div class="kernel-name">sing-box</div>
+        <div class="kernel-ver" x-text="kernels.singbox?.version || '未安装'"></div>
+        <div class="kernel-status" :class="kernels.singbox?.installed ? 'ok' : 'na'"
+          x-text="kernels.singbox?.installed ? '已安装' : '未安装'"></div>
+        <div class="kernel-actions">
+          <button class="btn btn-primary btn-sm" @click="updateKernel('singbox')" :disabled="updatePending">
+            <span x-text="updatePending==='singbox' ? '更新中...' : '在线更新'"></span>
+          </button>
+        </div>
+      </div>
+      <div class="card kernel-card">
+        <div class="kernel-icon geo-icon">G</div>
+        <div class="kernel-name">GeoData</div>
+        <div class="kernel-ver" x-text="kernels.geodata?.version || '未知版本'"></div>
+        <div class="kernel-status" :class="(kernels.geodata?.geoip==='yes'&&kernels.geodata?.geosite==='yes') ? 'ok' : 'na'"
+          x-text="(kernels.geodata?.geoip==='yes'&&kernels.geodata?.geosite==='yes') ? 'GeoIP+GeoSite ✓' : '缺少数据文件'"></div>
+        <div class="kernel-actions">
+          <button class="btn btn-primary btn-sm" @click="updateKernel('geodata')" :disabled="updatePending">
+            <span x-text="updatePending==='geodata' ? '更新中...' : '更新数据'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="msg" x-show="kernelMsg" x-text="kernelMsg" :class="kernelMsgOk?'msg-ok':'msg-err'"></div>
+  </div>
+
+  <!-- Logs -->
+  <div x-show="page==='logs'">
+    <div class="page-header">
+      <h1>运行日志</h1>
+      <button class="btn btn-ghost" @click="fetchLogs()">刷新</button>
+    </div>
+    <div class="card log-card">
+      <pre class="log-content" x-ref="logbox" x-text="logs.join('\n')"></pre>
+    </div>
+  </div>
+
+</main>
+
+<!-- Toast -->
+<div class="toast" x-show="toast.show" x-transition x-text="toast.msg"
+  :class="toast.ok ? 'toast-ok' : 'toast-err'"></div>
+
+<script src="alpine.min.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>

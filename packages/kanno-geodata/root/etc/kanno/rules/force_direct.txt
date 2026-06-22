@@ -1,0 +1,6 @@
+# Force direct - domains and IPs always bypass proxy
+# One per line: domain suffix, full domain, or CIDR
+# LAN ranges are always direct (handled by nftables bypass set)
+# Examples:
+# 192.168.1.0/24
+# localserver.home

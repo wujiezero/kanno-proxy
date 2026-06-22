@@ -1,0 +1,28 @@
+{
+    "luci-app-kanno": {
+        "description": "Grant UCI/RPC access to KannoProxy",
+        "read": {
+            "uci": ["kanno"],
+            "file": {
+                "/etc/kanno/rules/*": ["read"],
+                "/var/log/kanno.log": ["read"],
+                "/etc/kanno/geodata/version": ["read"],
+                "/tmp/kanno-update.log": ["read"]
+            },
+            "exec": {
+                "/usr/bin/kanno": ["exec"],
+                "/usr/bin/mihomo": ["exec"],
+                "/usr/bin/sing-box": ["exec"]
+            }
+        },
+        "write": {
+            "uci": ["kanno"],
+            "file": {
+                "/etc/kanno/rules/*": ["write"]
+            },
+            "exec": {
+                "/usr/bin/kanno": ["exec"]
+            }
+        }
+    }
+}

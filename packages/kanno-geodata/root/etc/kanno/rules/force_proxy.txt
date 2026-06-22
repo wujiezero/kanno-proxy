@@ -1,0 +1,5 @@
+# Force proxy - domains and IPs always routed through proxy
+# One per line: domain suffix, full domain, or CIDR
+# Examples:
+# google.com
+# 8.8.8.8/32

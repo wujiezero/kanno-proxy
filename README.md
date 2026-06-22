@@ -16,7 +16,7 @@ A beautiful and simple transparent proxy plugin for ImmortalWrt 25.12.0+, powere
 ## One-click Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/wujiezero/kanno-proxy/main/install.sh | sh
+curl -fsSL https://cdn.jsdelivr.net/gh/wujiezero/kanno-proxy@main/install.sh | sh
 ```
 
 The script will:

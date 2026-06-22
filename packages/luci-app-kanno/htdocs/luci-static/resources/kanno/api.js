@@ -320,13 +320,92 @@ function getLogs(p) {
 		});
 }
 
+/* ── Traffic (mihomo connections API) ──────────── */
+function getTraffic() {
+	return out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/connections'])
+		.then(function (s) {
+			try {
+				var o = JSON.parse(s);
+				return {
+					up: o.uploadTotal || 0,
+					down: o.downloadTotal || 0,
+					conns: Array.isArray(o.connections) ? o.connections.length : 0,
+					mem: o.memory || 0
+				};
+			} catch (e) {
+				return { up: 0, down: 0, conns: 0, mem: 0 };
+			}
+		});
+}
+
+/* ── Access check ──────────────────────────────── */
+function checkAccess() {
+	var sites = [
+		{ name: 'Baidu', url: 'https://www.baidu.com' },
+		{ name: 'Google', url: 'https://www.google.com/generate_204' },
+		{ name: 'YouTube', url: 'https://www.youtube.com' }
+	];
+	var results = [];
+	return sites.reduce(function (ch, site) {
+		return ch.then(function () {
+			return exec('/usr/bin/curl', ['-o', '/dev/null', '-s', '-w', '%{time_total}', '--max-time', '3', site.url])
+				.then(function (r) {
+					var t = parseFloat((r.stdout || '').trim());
+					results.push({
+						name: site.name,
+						ok: r.code === 0 && t > 0,
+						latency: r.code === 0 && t > 0 ? Math.round(t * 1000) : null
+					});
+				});
+		});
+	}, Promise.resolve()).then(function () { return { sites: results }; });
+}
+
+/* ── Quick mode change ─────────────────────────── */
+function setMode(p) {
+	var cmds = [];
+	if (p.mode && { rule: 1, global: 1, direct: 1 }[p.mode])
+		cmds.push(['set', CONF + '.global.mode=' + p.mode]);
+	if (p.dns_mode && (p.dns_mode === 'fake-ip' || p.dns_mode === 'redir-host')) {
+		cmds.push(['set', CONF + '.dns=dns']);
+		cmds.push(['set', CONF + '.dns.mode=' + p.dns_mode]);
+	}
+	if (cmds.length === 0) return Promise.resolve({ ok: true });
+	cmds.push(['commit', CONF]);
+	return uciBatch(cmds).then(refresh).then(function () { return { ok: true }; });
+}
+
+/* ── Kernel upload install (file already in /tmp via cgi-io) */
+function installUpload(p) {
+	var target = p.target;
+	if (target !== 'mihomo' && target !== 'singbox')
+		return Promise.resolve({ ok: false, error: 'invalid target' });
+	var dest = target === 'mihomo' ? '/usr/bin/mihomo' : '/usr/bin/sing-box';
+	var src = '/tmp/kanno-upload.bin';
+	var cmd = 'T=/tmp/kanno-ext-$$; U=/tmp/kanno-ungz-$$; mkdir -p "$T"; '
+		+ 'if tar -xzf ' + src + ' -C "$T" 2>/dev/null; then '
+		+ '  F=$(find "$T" -type f ! -name "*.sha256" | head -1); '
+		+ '  [ -n "$F" ] && mv "$F" ' + dest + '; '
+		+ 'elif gzip -d -c ' + src + ' > "$U" 2>/dev/null; then '
+		+ '  mv "$U" ' + dest + '; '
+		+ 'else '
+		+ '  mv ' + src + ' ' + dest + '; '
+		+ 'fi; chmod +x ' + dest + '; rm -rf ' + src + ' "$T" "$U"';
+	return exec('/bin/sh', ['-c', cmd]).then(function (r) {
+		if (r.code === 0) return { ok: true };
+		return { ok: false, error: (r.stderr || 'install failed').split('\n')[0] };
+	});
+}
+
 var DISPATCH = {
 	get_status: getStatus, get_nodes: getNodes, add_node: addNode, del_node: delNode,
 	toggle_node: toggleNode, test_node: testNode, test_all_nodes: testAll,
 	restart: restart, stop: stopSvc, get_groups: getGroups, save_groups: saveGroups,
 	get_rules: getRules, save_rules: saveRules, get_dns: getDns, save_dns: saveDns,
 	get_global: getGlobal, save_global: saveGlobal, get_kernels: getKernels,
-	update_kernel: updateKernel, get_logs: getLogs
+	update_kernel: updateKernel, get_logs: getLogs,
+	get_traffic: getTraffic, check_access: checkAccess, set_mode: setMode,
+	install_upload: installUpload
 };
 
 return baseclass.extend({

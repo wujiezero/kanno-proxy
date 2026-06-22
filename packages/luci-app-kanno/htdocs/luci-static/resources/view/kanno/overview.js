@@ -19,17 +19,34 @@ function svg(paths) {
 }
 
 var ICON = {
-	cpu:  '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
-	node: '<circle cx="12" cy="5" r="2"/><path d="M12 7v10"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 17v-1a6 6 0 0 1 12 0v1"/>',
+	up:   '<polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/>',
+	down: '<polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/>',
 	link: '<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
-	mode: '<path d="M3 6h18M3 12h18M3 18h18"/>'
+	mem:  '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>'
 };
+
+var _prevUp = 0, _prevDown = 0, _prevTs = 0;
+
+function fmtSpeed(bps) {
+	if (bps < 1024) return bps.toFixed(0) + ' B/s';
+	if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/s';
+	return (bps / 1048576).toFixed(2) + ' MB/s';
+}
+
+function fmtBytes(b) {
+	if (b < 1024) return b + ' B';
+	if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+	if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+	return (b / 1073741824).toFixed(2) + ' GB';
+}
 
 return view.extend({
 	load: function () {
 		return Promise.all([
 			L.resolveDefault(api.call('get_status'), {}),
-			L.resolveDefault(api.call('get_nodes'), { nodes: [] })
+			L.resolveDefault(api.call('get_traffic'), {}),
+			L.resolveDefault(api.call('get_global'), {}),
+			L.resolveDefault(api.call('get_dns'), {})
 		]);
 	},
 
@@ -40,6 +57,7 @@ return view.extend({
 			E('span', { 'class': 'kanno-pill ' + (running ? 'kanno-pill-on' : 'kanno-pill-off') }, [
 				E('span', { 'class': 'kanno-dot' }), running ? _('Running') : _('Stopped')
 			]),
+			s.version ? E('span', { 'class': 'kanno-muted' }, s.version) : '',
 			E('div', { 'class': 'kanno-actions' }, [
 				E('button', {
 					'class': 'cbi-button cbi-button-save important',
@@ -53,29 +71,104 @@ return view.extend({
 		];
 	},
 
-	stat: function (color, iconKey, value, label, id) {
-		return E('div', { 'class': 'kanno-card kanno-stat' }, [
-			E('div', { 'class': 'kanno-stat-icon kanno-ic-' + color }, svg(ICON[iconKey])),
-			E('div', {}, [
-				E('div', { 'class': 'kanno-stat-value', 'id': id || null }, value),
-				E('div', { 'class': 'kanno-stat-label' }, label)
+	trafficInner: function (t) {
+		t = t || {};
+		var now = Date.now();
+		var dt = _prevTs ? (now - _prevTs) / 1000 : 0;
+		var upSpd  = (dt > 0.5 && (t.up || 0) >= _prevUp)   ? ((t.up || 0) - _prevUp) / dt   : 0;
+		var dnSpd  = (dt > 0.5 && (t.down || 0) >= _prevDown) ? ((t.down || 0) - _prevDown) / dt : 0;
+		_prevUp = t.up || 0;
+		_prevDown = t.down || 0;
+		_prevTs = now;
+
+		return [
+			E('div', { 'class': 'kanno-card kanno-stat' }, [
+				E('div', { 'class': 'kanno-stat-icon kanno-ic-green' }, svg(ICON.up)),
+				E('div', {}, [
+					E('div', { 'class': 'kanno-stat-value' }, fmtSpeed(upSpd)),
+					E('div', { 'class': 'kanno-stat-label' }, _('Upload') + ' · ' + fmtBytes(t.up || 0))
+				])
+			]),
+			E('div', { 'class': 'kanno-card kanno-stat' }, [
+				E('div', { 'class': 'kanno-stat-icon kanno-ic-blue' }, svg(ICON.down)),
+				E('div', {}, [
+					E('div', { 'class': 'kanno-stat-value' }, fmtSpeed(dnSpd)),
+					E('div', { 'class': 'kanno-stat-label' }, _('Download') + ' · ' + fmtBytes(t.down || 0))
+				])
+			]),
+			E('div', { 'class': 'kanno-card kanno-stat' }, [
+				E('div', { 'class': 'kanno-stat-icon kanno-ic-amber' }, svg(ICON.link)),
+				E('div', {}, [
+					E('div', { 'class': 'kanno-stat-value' }, String(t.conns || 0)),
+					E('div', { 'class': 'kanno-stat-label' }, _('Connections'))
+				])
+			]),
+			E('div', { 'class': 'kanno-card kanno-stat' }, [
+				E('div', { 'class': 'kanno-stat-icon kanno-ic-indigo' }, svg(ICON.mem)),
+				E('div', {}, [
+					E('div', { 'class': 'kanno-stat-value' }, fmtBytes(t.mem || 0)),
+					E('div', { 'class': 'kanno-stat-label' }, _('Memory'))
+				])
 			])
-		]);
+		];
 	},
 
 	render: function (data) {
-		var s = data[0] || {}, nodes = (data[1] || {}).nodes || [];
+		var s = data[0] || {}, traffic = data[1] || {};
+		var global = data[2] || {}, dns = data[3] || {};
 
 		var statusCard = E('div', { 'class': 'kanno-card' }, [
 			E('div', { 'class': 'kanno-card-title' }, _('Service Status')),
 			E('div', { 'id': 'kanno-status', 'class': 'kanno-row' }, this.statusInner(s))
 		]);
 
-		var grid = E('div', { 'class': 'kanno-grid' }, [
-			this.stat('blue',   'cpu',  s.kernel || 'mihomo',          _('Kernel')),
-			this.stat('indigo', 'node', String(nodes.length),          _('Nodes')),
-			this.stat('amber',  'link', String(s.connections || 0),    _('Connections'), 'kanno-conns'),
-			this.stat('green',  'mode', s.mode || 'rule',              _('Mode'))
+		var trafficGrid = E('div', { 'id': 'kanno-traffic', 'class': 'kanno-grid' },
+			this.trafficInner(traffic));
+
+		var accessCard = E('div', { 'class': 'kanno-card' }, [
+			E('div', { 'class': 'kanno-row', 'style': 'margin-bottom:10px' }, [
+				E('span', { 'class': 'kanno-card-title', 'style': 'margin:0' }, _('Access Check')),
+				E('button', {
+					'class': 'cbi-button cbi-button-action',
+					'style': 'padding:2px 14px;font-size:12px',
+					'id': 'kanno-check-btn',
+					'click': ui.createHandlerFn(this, 'handleCheck')
+				}, _('Check'))
+			]),
+			E('div', { 'id': 'kanno-access' }, [
+				E('span', { 'class': 'kanno-muted' }, _('Click Check to test connectivity'))
+			])
+		]);
+
+		var modeSelect = E('select', { 'class': 'cbi-input-select', 'id': 'kanno-mode' }, [
+			E('option', { value: 'rule' }, _('Rule')),
+			E('option', { value: 'global' }, _('Global')),
+			E('option', { value: 'direct' }, _('Direct'))
+		]);
+		modeSelect.value = global.mode || 'rule';
+
+		var dnsSelect = E('select', { 'class': 'cbi-input-select', 'id': 'kanno-dns-mode' }, [
+			E('option', { value: 'fake-ip' }, 'Fake-IP'),
+			E('option', { value: 'redir-host' }, 'Redir-Host')
+		]);
+		dnsSelect.value = dns.mode || 'fake-ip';
+
+		var settingsCard = E('div', { 'class': 'kanno-card' }, [
+			E('div', { 'class': 'kanno-card-title' }, _('Quick Settings')),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Proxy Mode')),
+				E('div', { 'class': 'cbi-value-field' }, [modeSelect])
+			]),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Running Mode')),
+				E('div', { 'class': 'cbi-value-field' }, [dnsSelect])
+			]),
+			E('div', { 'style': 'text-align:right;margin-top:6px' }, [
+				E('button', {
+					'class': 'cbi-button cbi-button-save important',
+					'click': ui.createHandlerFn(this, 'handleSaveSettings')
+				}, _('Save & Restart'))
+			])
 		]);
 
 		var quick = E('div', { 'class': 'kanno-card' }, [
@@ -96,21 +189,23 @@ return view.extend({
 			])
 		]);
 
-		var version = s.version ? E('div', { 'class': 'kanno-card' }, [
-			E('div', { 'class': 'kanno-card-title' }, _('Version')),
-			E('code', { 'class': 'kanno-muted' }, s.version)
-		]) : '';
-
 		poll.add(L.bind(function () {
-			return L.resolveDefault(api.call('get_status'), {}).then(L.bind(function (st) {
+			return Promise.all([
+				L.resolveDefault(api.call('get_status'), {}),
+				L.resolveDefault(api.call('get_traffic'), {})
+			]).then(L.bind(function (r) {
 				var el = document.getElementById('kanno-status');
-				if (el) dom.content(el, this.statusInner(st));
-				var c = document.getElementById('kanno-conns');
-				if (c) c.textContent = String(st.connections || 0);
+				if (el) dom.content(el, this.statusInner(r[0]));
+				var tel = document.getElementById('kanno-traffic');
+				if (tel) dom.content(tel, this.trafficInner(r[1]));
 			}, this));
-		}, this), 5);
+		}, this), 3);
 
-		return E('div', { 'class': 'kanno' }, [statusCard, grid, quick, version]);
+		return E('div', { 'class': 'kanno' }, [
+			statusCard, trafficGrid,
+			E('div', { 'class': 'kanno-grid-2' }, [accessCard, settingsCard]),
+			quick
+		]);
 	},
 
 	handleAction: function (act) {
@@ -128,6 +223,41 @@ return view.extend({
 		});
 	},
 
+	handleCheck: function () {
+		var btn = document.getElementById('kanno-check-btn');
+		var el = document.getElementById('kanno-access');
+		if (btn) btn.disabled = true;
+		dom.content(el, E('span', { 'class': 'kanno-muted' }, _('Checking…')));
+		return api.call('check_access').then(function (r) {
+			var sites = (r && r.sites) || [];
+			dom.content(el, sites.map(function (s) {
+				return E('div', { 'class': 'kanno-access-item' }, [
+					E('span', { 'class': 'kanno-access-dot ' + (s.ok ? 'ok' : 'fail') }),
+					E('span', { 'class': 'kanno-access-name' }, s.name),
+					E('span', { 'class': 'kanno-access-result ' + (s.ok ? 'ok' : 'fail') },
+						s.ok ? s.latency + ' ms' : 'Timeout')
+				]);
+			}));
+			if (btn) btn.disabled = false;
+		}).catch(function () {
+			dom.content(el, E('span', { 'class': 'kanno-muted' }, _('Check failed')));
+			if (btn) btn.disabled = false;
+		});
+	},
+
+	handleSaveSettings: function () {
+		var mode = document.getElementById('kanno-mode').value;
+		var dnsMode = document.getElementById('kanno-dns-mode').value;
+		return api.call('set_mode', { mode: mode, dns_mode: dnsMode }).then(function () {
+			return api.call('restart');
+		}).then(function () {
+			ui.addTimeLimitedNotification(null,
+				E('p', _('Settings saved, restarting…')), 3000, 'success');
+		}).catch(function (e) {
+			ui.addNotification(null, E('p', _('Save failed: ') + e.message), 'danger');
+		});
+	},
+
 	handleQuickAdd: function () {
 		var inp = document.getElementById('kanno-quick');
 		var uri = (inp && inp.value || '').trim();
@@ -138,7 +268,8 @@ return view.extend({
 					E('p', _('Node added: ') + (r.name || uri)), 3000, 'success');
 				if (inp) inp.value = '';
 			} else {
-				ui.addNotification(null, E('p', _('Add failed: ') + ((r && r.error) || _('parse error'))), 'danger');
+				ui.addNotification(null,
+					E('p', _('Add failed: ') + ((r && r.error) || _('parse error'))), 'danger');
 			}
 		}).catch(function (e) {
 			ui.addNotification(null, E('p', _('Add failed: ') + e.message), 'danger');

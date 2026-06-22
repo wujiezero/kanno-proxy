@@ -18,6 +18,7 @@
 		},
 		"write": {
 			"uci": [ "kanno" ],
+			"cgi-io": [ "upload" ],
 			"ubus": {
 				"file": [ "exec", "write" ]
 			},

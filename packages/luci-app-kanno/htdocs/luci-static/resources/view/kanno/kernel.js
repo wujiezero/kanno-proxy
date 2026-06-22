@@ -1,6 +1,7 @@
 'use strict';
 'require view';
 'require ui';
+'require request';
 'require kanno.api as api';
 
 document.querySelector('head').appendChild(E('link', {
@@ -38,10 +39,16 @@ return view.extend({
 			E('div', { 'style': 'margin-bottom:10px' }, [
 				E('span', { 'class': 'kanno-pill ' + (installed ? 'kanno-pill-on' : 'kanno-pill-off') }, statusText)
 			]),
-			E('button', {
-				'class': 'cbi-button cbi-button-action important',
-				'click': ui.createHandlerFn(this, 'handleUpdate', target)
-			}, _('Update online'))
+			E('div', { 'class': 'kanno-actions', 'style': 'justify-content:center' }, [
+				E('button', {
+					'class': 'cbi-button cbi-button-action important',
+					'click': ui.createHandlerFn(this, 'handleUpdate', target)
+				}, _('Update online')),
+				target !== 'geodata' ? E('button', {
+					'class': 'cbi-button cbi-button-action',
+					'click': ui.createHandlerFn(this, 'handleUpload', target)
+				}, _('Upload')) : ''
+			])
 		]);
 	},
 
@@ -104,6 +111,66 @@ return view.extend({
 		}).catch(function (e) {
 			ui.addNotification(null, E('p', _('Update failed: ') + e.message), 'danger');
 		});
+	},
+
+	handleUpload: function (target) {
+		var fileInput = E('input', {
+			'type': 'file',
+			'accept': '.gz,.tar.gz,.tgz',
+			'style': 'margin:10px 0'
+		});
+		ui.showModal(_('Upload ') + target, [
+			E('p', { 'class': 'kanno-muted' },
+				_('Select the compressed kernel binary (.gz or .tar.gz)')),
+			fileInput,
+			E('div', { 'class': 'right', 'style': 'margin-top:14px' }, [
+				E('button', {
+					'class': 'cbi-button',
+					'click': ui.hideModal
+				}, _('Cancel')),
+				' ',
+				E('button', {
+					'class': 'cbi-button cbi-button-save important',
+					'click': ui.createHandlerFn(this, function () {
+						var file = fileInput.files && fileInput.files[0];
+						if (!file) return;
+						ui.showModal(_('Uploading…'), [
+							E('p', { 'class': 'spinning' }, _('Uploading file…'))
+						]);
+						var fd = new FormData();
+						fd.append('sessionid', L.env.sessionid);
+						fd.append('filename', '/tmp/kanno-upload.bin');
+						fd.append('filedata', file);
+						return request.post('/cgi-bin/cgi-upload', fd, {
+							timeout: 120000
+						}).then(function (res) {
+							if (!res.ok)
+								throw new Error(res.status === 404
+									? 'cgi-io not available (apk add cgi-io)'
+									: 'HTTP ' + res.status);
+							ui.showModal(_('Installing…'), [
+								E('p', { 'class': 'spinning' }, _('Decompressing and installing…'))
+							]);
+							return api.call('install_upload', { target: target });
+						}).then(function (r) {
+							ui.hideModal();
+							if (r && r.ok) {
+								ui.addTimeLimitedNotification(null,
+									E('p', target + ' ' + _('installed')), 4000, 'success');
+								window.location.reload();
+							} else {
+								ui.addNotification(null,
+									E('p', _('Install failed: ') + ((r && r.error) || '')), 'danger');
+							}
+						}).catch(function (e) {
+							ui.hideModal();
+							ui.addNotification(null,
+								E('p', _('Upload failed: ') + e.message), 'danger');
+						});
+					})
+				}, _('Upload & Install'))
+			])
+		]);
 	},
 
 	handleSave: null,

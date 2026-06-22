@@ -173,7 +173,21 @@ UI="packages/luci-app-kanno/htdocs/luci-static/kanno"
 download "$UI/index.html"    /www/luci-static/kanno/index.html
 download "$UI/style.css"     /www/luci-static/kanno/style.css
 download "$UI/app.js"        /www/luci-static/kanno/app.js
-download "$UI/alpine.min.js" /www/luci-static/kanno/alpine.min.js
+
+# Alpine.js is a third-party library (~44 KB); fetch from official CDN
+# rather than bloating the repo with a binary blob.
+ALPINE_DEST="/www/luci-static/kanno/alpine.min.js"
+if [ ! -f "$ALPINE_DEST" ] || [ "$(wc -c < "$ALPINE_DEST")" -lt 10000 ]; then
+    if curl -fsSL --max-time 60 \
+        -o "$ALPINE_DEST" \
+        "https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" 2>/dev/null; then
+        info "Alpine.js 3.14.1 downloaded"
+    else
+        warn "Alpine.js download failed — Web UI will not function without it"
+    fi
+else
+    info "Alpine.js already present"
+fi
 info "Web UI installed"
 
 # ── Step 6: LuCI menu integration ────────────────────────────────────────────

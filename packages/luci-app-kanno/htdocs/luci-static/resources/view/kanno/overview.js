@@ -25,6 +25,11 @@ var ICON = {
 	mem:  '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>'
 };
 
+function notify(content, ms) {
+	var el = ui.addNotification(null, content);
+	if (ms > 0) window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms);
+}
+
 var _prevUp = 0, _prevDown = 0, _prevTs = 0;
 
 function fmtSpeed(bps) {
@@ -178,9 +183,9 @@ return view.extend({
 					'class': 'cbi-input-text', 'id': 'kanno-quick', 'type': 'text',
 					'style': 'flex:1;min-width:240px',
 					'placeholder': 'vless:// vmess:// trojan:// ss:// hy2:// tuic://',
-					'keydown': ui.createHandlerFn(this, function (ev) {
-						if (ev.keyCode === 13) return this.handleQuickAdd(ev);
-					})
+					'keydown': L.bind(function (ev) {
+						if (ev.keyCode === 13) this.handleQuickAdd(ev);
+					}, this)
 				}),
 				E('button', {
 					'class': 'cbi-button cbi-button-action important',
@@ -211,9 +216,9 @@ return view.extend({
 	handleAction: function (act) {
 		var self = this;
 		return api.call(act).then(function () {
-			ui.addTimeLimitedNotification(null,
+			notify(
 				E('p', act === 'stop' ? _('Service stopped') : _('Service is (re)starting…')),
-				3000, 'success');
+				3000);
 			return new Promise(function (res) { window.setTimeout(res, act === 'stop' ? 1500 : 2500); });
 		}).then(function () {
 			return L.resolveDefault(api.call('get_status'), {});
@@ -251,8 +256,7 @@ return view.extend({
 		return api.call('set_mode', { mode: mode, dns_mode: dnsMode }).then(function () {
 			return api.call('restart');
 		}).then(function () {
-			ui.addTimeLimitedNotification(null,
-				E('p', _('Settings saved, restarting…')), 3000, 'success');
+			notify(E('p', _('Settings saved, restarting…')), 3000);
 		}).catch(function (e) {
 			ui.addNotification(null, E('p', _('Save failed: ') + e.message), 'danger');
 		});
@@ -264,8 +268,7 @@ return view.extend({
 		if (!uri) return;
 		return api.call('add_node', { uri: uri }).then(function (r) {
 			if (r && r.ok) {
-				ui.addTimeLimitedNotification(null,
-					E('p', _('Node added: ') + (r.name || uri)), 3000, 'success');
+				notify(E('p', _('Node added: ') + (r.name || uri)), 3000);
 				if (inp) inp.value = '';
 			} else {
 				ui.addNotification(null,

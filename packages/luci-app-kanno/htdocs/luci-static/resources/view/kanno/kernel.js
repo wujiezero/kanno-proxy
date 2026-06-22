@@ -9,6 +9,11 @@ document.querySelector('head').appendChild(E('link', {
 	'href': L.resource('view/kanno/style.css')
 }));
 
+function notify(content, ms) {
+	var el = ui.addNotification(null, content);
+	if (ms > 0) window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms);
+}
+
 function row(label, field) {
 	return E('div', { 'class': 'cbi-value' }, [
 		E('label', { 'class': 'cbi-value-title' }, label),
@@ -95,7 +100,7 @@ return view.extend({
 		};
 		return api.call('save_global', payload).then(function (r) {
 			if (r && r.ok)
-				ui.addTimeLimitedNotification(null, E('p', _('Settings saved — restart to apply')), 3500, 'success');
+				notify(E('p', _('Settings saved — restart to apply')), 3500);
 			else
 				ui.addNotification(null, E('p', _('Save failed')), 'danger');
 		}).catch(function (e) {
@@ -123,8 +128,7 @@ return view.extend({
 					if (info.installed) {
 						window.clearInterval(poll);
 						ui.hideModal();
-						ui.addTimeLimitedNotification(null,
-							E('p', target + ' ' + _('updated successfully')), 4000, 'success');
+						notify(E('p', target + ' ' + _('updated successfully')), 4000);
 						window.location.reload();
 					}
 				});
@@ -177,8 +181,7 @@ return view.extend({
 						}).then(function (r) {
 							ui.hideModal();
 							if (r && r.ok) {
-								ui.addTimeLimitedNotification(null,
-									E('p', target + ' ' + _('installed')), 4000, 'success');
+								notify(E('p', target + ' ' + _('installed')), 4000);
 								window.location.reload();
 							} else {
 								ui.addNotification(null,

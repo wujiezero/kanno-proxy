@@ -9,6 +9,11 @@ document.querySelector('head').appendChild(E('link', {
 	'href': L.resource('view/kanno/style.css')
 }));
 
+function notify(content, ms) {
+	var el = ui.addNotification(null, content);
+	if (ms > 0) window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms);
+}
+
 function latClass(ms) {
 	if (!ms) return 'kanno-lat-none';
 	if (ms < 150) return 'kanno-lat-good';
@@ -100,9 +105,7 @@ return view.extend({
 		});
 		return chain.then(function () {
 			ui.hideModal();
-			ui.addTimeLimitedNotification(null,
-				E('p', _('Imported %d node(s), %d failed').format(ok, fail)),
-				3500, fail ? 'warning' : 'success');
+			notify(E('p', _('Imported %d node(s), %d failed').format(ok, fail)), 3500);
 			return self.reload();
 		});
 	},
@@ -110,9 +113,7 @@ return view.extend({
 	handleTest: function (id) {
 		var self = this;
 		return api.call('test_node', { id: id }).then(function (r) {
-			ui.addTimeLimitedNotification(null,
-				E('p', (r && r.ok) ? _('Latency: %dms').format(r.latency) : _('Connection timed out')),
-				3000, (r && r.ok) ? 'success' : 'warning');
+			notify(E('p', (r && r.ok) ? _('Latency: %dms').format(r.latency) : _('Connection timed out')), 3000);
 			return self.reload();
 		});
 	},
@@ -120,7 +121,7 @@ return view.extend({
 	handleTestAll: function () {
 		var self = this;
 		return api.call('test_all_nodes').then(function () {
-			ui.addTimeLimitedNotification(null, E('p', _('Latency test finished')), 3000, 'success');
+			notify(E('p', _('Latency test finished')), 3000);
 			return self.reload();
 		});
 	},
@@ -143,7 +144,7 @@ return view.extend({
 					'click': ui.createHandlerFn(this, function () {
 						return api.call('del_node', { id: n.id }).then(function () {
 							ui.hideModal();
-							ui.addTimeLimitedNotification(null, E('p', _('Node deleted')), 2500, 'success');
+							notify(E('p', _('Node deleted')), 2500);
 							return self.reload();
 						});
 					})

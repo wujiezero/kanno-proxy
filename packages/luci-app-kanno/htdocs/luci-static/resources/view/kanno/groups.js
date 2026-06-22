@@ -9,6 +9,11 @@ document.querySelector('head').appendChild(E('link', {
 	'href': L.resource('view/kanno/style.css')
 }));
 
+function notify(content, ms) {
+	var el = ui.addNotification(null, content);
+	if (ms > 0) window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms);
+}
+
 return view.extend({
 	load: function () {
 		return Promise.all([
@@ -105,7 +110,7 @@ return view.extend({
 	handleSaveGroups: function () {
 		return api.call('save_groups', { groups: this.groups }).then(function (r) {
 			if (r && r.ok)
-				ui.addTimeLimitedNotification(null, E('p', _('Groups saved — restart to apply')), 3500, 'success');
+				notify(E('p', _('Groups saved — restart to apply')), 3500);
 			else
 				ui.addNotification(null, E('p', _('Save failed')), 'danger');
 		}).catch(function (e) {

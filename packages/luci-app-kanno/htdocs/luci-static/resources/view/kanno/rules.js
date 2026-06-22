@@ -8,6 +8,11 @@ document.querySelector('head').appendChild(E('link', {
 	'href': L.resource('view/kanno/style.css')
 }));
 
+function notify(content, ms) {
+	var el = ui.addNotification(null, content);
+	if (ms > 0) window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms);
+}
+
 function row(label, field, desc) {
 	return E('div', { 'class': 'cbi-value' }, [
 		E('label', { 'class': 'cbi-value-title' }, label),
@@ -82,7 +87,7 @@ return view.extend({
 		};
 		return api.call('save_rules', payload).then(function (r) {
 			if (r && r.ok)
-				ui.addTimeLimitedNotification(null, E('p', _('Rules saved — restart to apply')), 3500, 'success');
+				notify(E('p', _('Rules saved — restart to apply')), 3500);
 			else
 				ui.addNotification(null, E('p', _('Save failed')), 'danger');
 		}).catch(function (e) {

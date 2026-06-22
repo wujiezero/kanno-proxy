@@ -3,6 +3,8 @@
 A clean, native-LuCI transparent proxy plugin for ImmortalWrt 25.12.0+ / OpenWrt 22.03+,
 powered by [mihomo](https://github.com/MetaCubeX/mihomo) and [sing-box](https://github.com/SagerNet/sing-box).
 
+> Languages: English · [简体中文](README.zh-CN.md)
+
 ## Features
 
 - **Native LuCI UI** — pure JS views rendered as top tabs under *Services → KannoProxy*, matches the router theme (light/dark)

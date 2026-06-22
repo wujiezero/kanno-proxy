@@ -14,9 +14,21 @@ MIHOMO_PID="/var/run/kanno-mihomo.pid"
 SINGBOX_PID="/var/run/kanno-singbox.pid"
 MIHOMO_API="http://127.0.0.1:9090"
 
-log_info()  { logger -t kanno -p daemon.info  "$*"; echo "[INFO]  $*" >> "$KANNO_LOG"; }
-log_warn()  { logger -t kanno -p daemon.warn  "$*"; echo "[WARN]  $*" >> "$KANNO_LOG"; }
-log_error() { logger -t kanno -p daemon.err   "$*"; echo "[ERROR] $*" >> "$KANNO_LOG"; }
+log_info()  {
+    echo "[INFO]  $*" >> "$KANNO_LOG"
+    logger -t kanno -p daemon.info  "$*" 2>/dev/null
+    printf '\033[0;32m[✓]\033[0m %s\n' "$*"
+}
+log_warn()  {
+    echo "[WARN]  $*" >> "$KANNO_LOG"
+    logger -t kanno -p daemon.warn  "$*" 2>/dev/null
+    printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2
+}
+log_error() {
+    echo "[ERROR] $*" >> "$KANNO_LOG"
+    logger -t kanno -p daemon.err   "$*" 2>/dev/null
+    printf '\033[0;31m[✗]\033[0m %s\n' "$*" >&2
+}
 
 kanno_gen_id() {
     head -c 4 /dev/urandom | hexdump -e '1/4 "%08x"'

@@ -31,23 +31,21 @@ function kannoApp() {
     },
 
     async rpc(method, params) {
-      const body = JSON.stringify({
-        jsonrpc: '2.0', id: Date.now(),
-        method: 'call',
-        params: ['00000000000000000000000000000000', 'kanno', method, params || {}]
-      });
+      const body = JSON.stringify({ method: method, params: params || {} });
       try {
-        const r = await fetch('/ubus', {
+        const r = await fetch('/cgi-bin/kanno', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body,
+          body: body,
           credentials: 'include'
         });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         const j = await r.json();
-        if (j.error) throw new Error(j.error.message || 'RPC error');
-        return j.result?.[1] || j.result;
+        if (!j.ok) throw new Error(j.error || 'RPC error');
+        return j.result;
       } catch (e) {
-        // Fallback to mock data when ubus not available (dev mode)
+        // Fallback to mock data when backend unavailable (dev mode)
+        console.warn('[kanno] RPC fallback for', method, ':', e.message);
         return this._devFallback(method, params);
       }
     },

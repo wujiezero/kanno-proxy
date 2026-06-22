@@ -58,6 +58,9 @@
     <button class="btn btn-danger btn-sm" @click="doStop()" x-show="status.running" :disabled="actionPending">停止</button>
     <button class="btn btn-ghost btn-sm" @click="doRestart()" :disabled="actionPending">重启</button>
   </div>
+  <div class="sidebar-footer">
+    <a href="/cgi-bin/luci" class="luci-back-link">← 返回 LuCI</a>
+  </div>
 </nav>
 
 <!-- Main content -->

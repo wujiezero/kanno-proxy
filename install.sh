@@ -101,6 +101,8 @@ mkdir -p /etc/kanno/singbox
 mkdir -p /var/log
 mkdir -p /var/run/kanno
 mkdir -p /www/luci-static/kanno
+mkdir -p /www/luci-static/resources/view/kanno
+mkdir -p /www/cgi-bin
 mkdir -p /usr/lib/lua/luci/rpc
 mkdir -p /usr/share/luci/menu.d
 mkdir -p /usr/share/rpcd/acl.d
@@ -168,21 +170,30 @@ info "Core scripts installed"
 # ── Step 5: Download Web UI ───────────────────────────────────────────────────
 step "Downloading Web UI..."
 UI="packages/luci-app-kanno/htdocs/luci-static/kanno"
-download "$UI/index.html"   /www/luci-static/kanno/index.html
-download "$UI/style.css"    /www/luci-static/kanno/style.css
-download "$UI/app.js"       /www/luci-static/kanno/app.js
+download "$UI/index.html"    /www/luci-static/kanno/index.html
+download "$UI/style.css"     /www/luci-static/kanno/style.css
+download "$UI/app.js"        /www/luci-static/kanno/app.js
 download "$UI/alpine.min.js" /www/luci-static/kanno/alpine.min.js
 info "Web UI installed"
 
-# ── Step 6: LuCI rpcd backend ────────────────────────────────────────────────
-step "Installing LuCI backend..."
+# ── Step 6: LuCI menu integration ────────────────────────────────────────────
+step "Installing LuCI integration..."
+# Lua RPC handler (required by both CGI and potential rpcd use)
 download "packages/luci-app-kanno/luasrc/rpc/kanno.lua" \
     /usr/lib/lua/luci/rpc/kanno.lua
+# LuCI JS view — registers "KannoProxy" in Services menu (LuCI 26.x)
+download "packages/luci-app-kanno/htdocs/luci-static/resources/view/kanno/main.js" \
+    /www/luci-static/resources/view/kanno/main.js
+# CGI backend — serves /cgi-bin/kanno for the SPA's JSON-RPC calls
+download "packages/luci-app-kanno/root/www/cgi-bin/kanno" \
+    /www/cgi-bin/kanno 755
+# LuCI menu entry
 download "packages/luci-app-kanno/root/usr/share/luci/menu.d/luci-app-kanno.json" \
     /usr/share/luci/menu.d/luci-app-kanno.json
+# rpcd ACL (allows LuCI session to call kanno ubus methods if rpcd is used)
 download "packages/luci-app-kanno/root/usr/share/rpcd/acl.d/luci-app-kanno.json" \
     /usr/share/rpcd/acl.d/luci-app-kanno.json
-info "LuCI backend installed"
+info "LuCI integration installed"
 
 # ── Step 7: UCI default config ───────────────────────────────────────────────
 step "Setting up UCI configuration..."

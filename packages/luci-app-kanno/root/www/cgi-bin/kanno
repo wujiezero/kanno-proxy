@@ -1,0 +1,37 @@
+#!/usr/bin/lua
+-- KannoProxy JSON-RPC CGI endpoint
+-- Served at: /cgi-bin/kanno
+-- Request:  POST {"method":"get_status","params":{}}
+-- Response: {"ok":true,"result":{...}}
+
+io.write("Content-Type: application/json\r\n\r\n")
+
+local function write_err(msg)
+    io.write('{"ok":false,"error":"' .. tostring(msg):gsub('"', '\\"') .. '"}\n')
+    os.exit(0)
+end
+
+local ok_json, json = pcall(require, "luci.jsonc")
+if not ok_json then write_err("luci.jsonc not available") end
+
+local body = io.read("*a") or ""
+if body == "" then write_err("empty request body") end
+
+local req = json.parse(body)
+if not req then write_err("invalid JSON") end
+
+local method = tostring(req.method or "")
+if method == "" then write_err("method required") end
+
+local ok_M, M = pcall(require, "luci.rpc.kanno")
+if not ok_M then write_err("kanno backend error: " .. tostring(M)) end
+
+local fn = M[method]
+if type(fn) ~= "function" then write_err("unknown method: " .. method) end
+
+local ok_call, result = pcall(fn, req.params or {})
+if ok_call then
+    io.write(json.stringify({ ok = true, result = result }) .. "\n")
+else
+    io.write(json.stringify({ ok = false, error = tostring(result) }) .. "\n")
+end

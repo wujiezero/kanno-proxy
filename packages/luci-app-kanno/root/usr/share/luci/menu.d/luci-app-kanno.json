@@ -3,16 +3,11 @@
         "title": "KannoProxy",
         "order": 10,
         "action": {
-            "type": "firstchild",
-            "recurse": true
-        }
-    },
-    "admin/services/kanno/dashboard": {
-        "title": "Dashboard",
-        "order": 1,
-        "action": {
             "type": "view",
             "path": "kanno/main"
+        },
+        "depends": {
+            "acl": [ "luci-app-kanno" ]
         }
     }
 }

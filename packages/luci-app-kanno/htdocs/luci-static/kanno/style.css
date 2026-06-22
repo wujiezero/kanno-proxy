@@ -105,6 +105,23 @@ body {
   margin-top: 8px;
 }
 
+.sidebar-footer {
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.luci-back-link {
+  display: block;
+  font-size: 12px;
+  color: var(--text-3);
+  text-decoration: none;
+  padding: 5px 4px;
+  border-radius: 4px;
+  transition: color .15s;
+}
+.luci-back-link:hover { color: var(--text-1); }
+
 /* ── Main content ── */
 .content {
   margin-left: var(--sidebar-w);

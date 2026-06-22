@@ -140,7 +140,7 @@ generate_mihomo_config() {
     local loglevel=$(_u "global.log_level"); loglevel="${loglevel:-info}"
     local _ipv6=$(_u "global.ipv6")
     local ipv6; [ "$_ipv6" = "1" ] && ipv6="true" || ipv6="false"
-    local tun=$(_u "global.tun"); tun="${tun:-1}"
+    local tun=$(_u "global.tun"); tun="${tun:-0}"
     local dns_mode=$(_u "dns.mode"); dns_mode="${dns_mode:-fake-ip}"
     local dns_port=$(_u "dns.listen_port"); dns_port="${dns_port:-1053}"
 

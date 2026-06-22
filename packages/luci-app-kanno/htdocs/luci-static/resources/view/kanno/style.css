@@ -86,7 +86,11 @@
 	display: inline-flex; align-items: center; gap: 4px;
 	padding: 4px 12px; border-radius: 6px;
 	background: rgba(99, 102, 241, .1); font-size: 13px;
+	border: 1px solid transparent; cursor: pointer;
+	font-family: inherit; transition: background .15s ease, border-color .15s ease;
 }
+.kanno-active-node:hover { background: rgba(99, 102, 241, .18); border-color: rgba(99, 102, 241, .4); }
+.kanno-node-picker { max-height: 320px; overflow-y: auto; margin: 4px 0 10px; }
 .kanno-active-label { color: var(--text-color-low, #8a8a8a); font-weight: 500; }
 .kanno-active-name { color: #6366f1; font-weight: 600; }
 .kanno-pill-on .kanno-dot { animation: kanno-pulse 2s infinite; }
@@ -147,12 +151,23 @@
 .kanno-badge.hy2, .kanno-badge.hysteria2 { background: rgba(246, 43, 18, .1); color: #f62b12; }
 .kanno-badge.tuic   { background: rgba(139, 92, 246, .14); color: #8b5cf6; }
 .kanno-badge.naive  { background: rgba(20, 184, 166, .14); color: #14b8a6; }
+.kanno-badge.anytls { background: rgba(236, 72, 153, .12); color: #ec4899; }
 
 .kanno-lat { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
 .kanno-lat-good { background: rgba(0, 172, 89, .12); color: #00ac59; }
 .kanno-lat-ok   { background: rgba(239, 189, 11, .15); color: #b8860b; }
 .kanno-lat-bad  { background: rgba(246, 43, 18, .1);  color: #f62b12; }
 .kanno-lat-none { color: var(--text-color-low, #aaa); }
+
+/* incompatible-node warning banner */
+.kanno-node-warn {
+	display: flex; align-items: center; gap: 6px;
+	font-size: 11.5px; font-weight: 500;
+	color: #b8860b;
+	background: rgba(239, 189, 11, .12);
+	border: 1px solid rgba(239, 189, 11, .25);
+	border-radius: 5px; padding: 5px 9px; margin-bottom: 9px;
+}
 
 /* ── Kernel cards ───────────────────────────────────────── */
 .kanno-kernel { text-align: center; }

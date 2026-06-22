@@ -39,7 +39,11 @@ return view.extend({
 				E('span', {}, (n.security && n.security !== 'none') ? n.security : 'no-tls'),
 				E('span', {}, n.transport || 'tcp')
 			]),
+			n.incompat ? E('div', { 'class': 'kanno-node-warn', 'title': n.incompat }, [
+				E('span', {}, '⚠ ' + _('Incompatible with current kernel: ') + n.incompat)
+			]) : '',
 			E('div', { 'class': 'kanno-actions', 'style': 'justify-content:flex-end' }, [
+				(n.enabled && !n.incompat) ? E('button', { 'class': 'cbi-button cbi-button-positive', 'click': ui.createHandlerFn(this, 'handleSetActive', n) }, _('Use')) : '',
 				E('button', { 'class': 'cbi-button cbi-button-action', 'click': ui.createHandlerFn(this, 'handleTest', n.id) }, _('Test')),
 				E('button', { 'class': 'cbi-button cbi-button-neutral', 'click': ui.createHandlerFn(this, 'handleEdit', n.id) }, _('Edit')),
 				E('button', { 'class': 'cbi-button cbi-button-neutral', 'click': ui.createHandlerFn(this, 'handleToggle', n) }, n.enabled ? _('Disable') : _('Enable')),
@@ -79,7 +83,7 @@ return view.extend({
 	handleAddDialog: function () {
 		var self = this;
 		ui.showModal(_('Add Proxy Node'), [
-			E('p', { 'class': 'kanno-muted' }, _('Paste node URIs (one per line). Supported: vless:// vmess:// trojan:// ss:// hy2:// tuic:// naive+https://')),
+			E('p', { 'class': 'kanno-muted' }, _('Paste node URIs (one per line). Supported: vless:// vmess:// trojan:// ss:// hy2:// tuic:// anytls:// naive+https://')),
 			E('textarea', { 'class': 'cbi-input-textarea', 'id': 'kanno-add-uris', 'rows': 6, 'style': 'width:100%;font-family:var(--font-mono,monospace)' }),
 			E('div', { 'class': 'right', 'style': 'margin-top:14px' }, [
 				E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Cancel')), ' ',
@@ -111,11 +115,25 @@ return view.extend({
 		});
 	},
 
+	handleSetActive: function (n) {
+		return api.call('select_node', { name: n.name }).then(function (r) {
+			notify(E('p', (r && r.ok) ? (_('Active node → ') + n.name) : _('Switch failed (node not in group?)')), 2500);
+		});
+	},
+
 	handleTest: function (id) {
-		var self = this;
+		var card = document.querySelector('.kanno-node[data-id="' + id + '"]');
+		var latEl = card && card.querySelector('.kanno-lat');
+		if (latEl) { latEl.className = 'kanno-lat kanno-lat-none'; latEl.textContent = '…'; }
 		return api.call('test_node', { id: id }).then(function (r) {
-			notify(E('p', (r && r.ok) ? _('Latency: %dms').format(r.latency) : _('Connection timed out')), 3000);
-			return self.reload();
+			if (!latEl) return;
+			if (r && r.ok) {
+				latEl.className = 'kanno-lat ' + latClass(r.latency);
+				latEl.textContent = r.latency + 'ms';
+			} else {
+				latEl.className = 'kanno-lat kanno-lat-bad';
+				latEl.textContent = _('timeout');
+			}
 		});
 	},
 

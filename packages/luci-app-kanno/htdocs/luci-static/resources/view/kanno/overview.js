@@ -64,9 +64,14 @@ return view.extend({
 				E('span', { 'class': 'kanno-dot' }), running ? _('Running') : _('Stopped')
 			]),
 			s.version ? E('span', { 'class': 'kanno-muted' }, s.version) : '',
-			(running && activeNode) ? E('span', { 'class': 'kanno-active-node' }, [
+			running ? E('button', {
+				'class': 'kanno-active-node',
+				'title': _('Click to switch the active node'),
+				'click': ui.createHandlerFn(this, 'handleSwitchNode')
+			}, [
 				E('span', { 'class': 'kanno-active-label' }, _('Active: ')),
-				E('span', { 'class': 'kanno-active-name' }, activeNode)
+				E('span', { 'class': 'kanno-active-name' }, activeNode || _('(auto)')),
+				E('span', { 'style': 'margin-left:5px;opacity:.55;font-size:12px' }, '⇄')
 			]) : '',
 			E('div', { 'class': 'kanno-actions' }, [
 				E('button', {
@@ -234,7 +239,7 @@ return view.extend({
 				E('input', {
 					'class': 'cbi-input-text', 'id': 'kanno-quick', 'type': 'text',
 					'style': 'flex:1;min-width:240px',
-					'placeholder': 'vless:// vmess:// trojan:// ss:// hy2:// tuic://',
+					'placeholder': 'vless:// vmess:// trojan:// ss:// hy2:// tuic:// anytls://',
 					'keydown': L.bind(function (ev) {
 						if (ev.keyCode === 13) this.handleQuickAdd(ev);
 					}, this)
@@ -263,6 +268,46 @@ return view.extend({
 			E('div', { 'class': 'kanno-grid-2' }, [accessCard, settingsCard]),
 			quick
 		]);
+	},
+
+	handleSwitchNode: function () {
+		var self = this;
+		return api.call('get_proxy_options').then(function (r) {
+			var opts = (r && r.all) || [];
+			var now = (r && r.now) || '';
+			if (!opts.length) {
+				ui.addNotification(null, E('p', _('No selectable nodes (is the service running?)')), 'warning');
+				return;
+			}
+			ui.showModal(_('Switch Active Node'), [
+				E('p', { 'class': 'kanno-muted' }, _('Choose what the PROXY group uses. "AUTO" always picks the fastest node.')),
+				E('div', { 'class': 'kanno-node-picker' }, opts.map(function (name) {
+					return E('button', {
+						'class': 'cbi-button ' + (name === now ? 'cbi-button-positive' : 'cbi-button-neutral'),
+						'style': 'display:block;width:100%;text-align:left;margin-bottom:6px',
+						'click': ui.createHandlerFn(self, 'doSelectNode', name)
+					}, (name === now ? '✓ ' : '  ') + name);
+				})),
+				E('div', { 'class': 'right', 'style': 'margin-top:10px' }, [
+					E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Close'))
+				])
+			]);
+		});
+	},
+
+	doSelectNode: function (name) {
+		var self = this;
+		return api.call('select_node', { name: name }).then(function () {
+			ui.hideModal();
+			notify(E('p', _('Active node → ') + name), 2500);
+			return Promise.all([
+				L.resolveDefault(api.call('get_status'), {}),
+				L.resolveDefault(api.call('get_traffic'), {})
+			]).then(function (r) {
+				var el = document.getElementById('kanno-status');
+				if (el) dom.content(el, self.statusInner(r[0], r[1].activeNode));
+			});
+		});
 	},
 
 	handleAction: function (act) {

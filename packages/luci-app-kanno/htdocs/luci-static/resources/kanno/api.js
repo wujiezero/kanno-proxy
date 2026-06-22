@@ -1,40 +1,49 @@
 'use strict';
 'require baseclass';
-'require fs';
 'require uci';
-
-/*
- * Native data layer for KannoProxy.
- *
- * ImmortalWrt 25.12 ships the JavaScript-only LuCI client with NO Lua
- * runtime, so the old /cgi-bin/kanno + luci.rpc.kanno backend cannot run.
- * Everything here is implemented with core LuCI JS modules instead:
- *   - 'require uci'  → read/declare config (writes go through the uci CLI)
- *   - 'require fs'   → fs.exec() to drive the /usr/bin/kanno shell CLI
- *
- * The public surface is unchanged: api.call('<method>', params) → Promise,
- * so the views keep working without modification.
- */
 
 var CONF  = 'kanno';
 var KANNO = '/usr/bin/kanno';
 var UCI   = '/sbin/uci';
 var LOG   = '/var/log/kanno.log';
-var SCHEME = /^(vless|vmess|trojan|ss|hy2|hysteria2|tuic|naive\+https):\/\//;
+var SCHEME = /^(vless|vmess|trojan|ss|hy2|hysteria2|tuic|naive\+https|anytls):\/\//;
 var LOGLEVELS = { silent: 1, error: 1, warning: 1, info: 1, debug: 1 };
 
-/* fs.exec that never rejects — returns {code, stdout, stderr} */
+/* UI mirror of /usr/lib/kanno/capabilities.sh (source of truth is the shell).
+   Used only to warn the user proactively; the kernel/config validation is the
+   authority that actually drops incompatible nodes. */
+var KERNEL_CAPS = {
+	mihomo:  ['vless', 'vmess', 'trojan', 'ss', 'hysteria2', 'hy2', 'tuic', 'anytls'],
+	singbox: ['vless', 'vmess', 'trojan', 'ss', 'hysteria2', 'hy2', 'tuic', 'anytls']
+};
+function nodeIncompat(kernel, type, security) {
+	var k = (kernel === 'singbox') ? 'singbox' : 'mihomo';
+	if (KERNEL_CAPS[k].indexOf(type) < 0) return k + ' has no "' + (type || '?') + '" outbound';
+	if (k === 'mihomo' && type === 'anytls' && security === 'reality')
+		return 'mihomo does not support anytls+reality';
+	return '';
+}
+var _rpcId = 0;
+
+/* Direct ubus HTTP call — bypasses LuCI RPC batching which deadlocks in load() */
 function exec(cmd, args) {
-	return fs.exec(cmd, args).catch(function (e) {
+	var payload = JSON.stringify({
+		jsonrpc: '2.0', id: ++_rpcId, method: 'call',
+		params: [L.env.sessionid, 'file', 'exec',
+		         { command: cmd, params: args || [] }]
+	});
+	return L.Request.post('/ubus/', payload, { 'Content-Type': 'application/json' }).then(function (resp) {
+		var j = resp.json();
+		if (j && j.result && j.result[0] === 0 && j.result[1])
+			return j.result[1];
+		return { code: -1, stdout: '', stderr: 'ubus error' };
+	}).catch(function (e) {
 		return { code: -1, stdout: '', stderr: String(e && e.message || e) };
 	});
 }
-/* exec → trimmed stdout string */
 function out(cmd, args) {
 	return exec(cmd, args).then(function (r) { return (r.stdout || '').replace(/\s+$/, ''); });
 }
-/* run a sequence of `uci` CLI invocations (arg arrays); args are NOT shell-
- * interpreted (fs.exec spawns directly) so user values are injection-safe */
 function uciBatch(cmds) {
 	return cmds.reduce(function (ch, a) {
 		return ch.then(function () { return exec(UCI, a); });
@@ -72,16 +81,19 @@ function getStatus() {
 /* ── Nodes ──────────────────────────────────────────────── */
 function getNodes() {
 	return loadConf().then(function () {
-		return { nodes: uci.sections(CONF, 'proxy').map(function (s) {
+		var kernel = uci.get(CONF, 'global', 'kernel') || 'mihomo';
+		return { kernel: kernel, nodes: uci.sections(CONF, 'proxy').map(function (s) {
+			var type = s.type || '', security = s.security || 'none';
 			return {
 				id:        s['.name'].replace(/^proxy_/, ''),
 				name:      s.name || '',
-				type:      s.type || '',
+				type:      type,
 				server:    s.server || '',
 				port:      s.port || '',
 				enabled:   s.enabled !== '0',
-				security:  s.security || 'none',
-				transport: s.transport || 'tcp'
+				security:  security,
+				transport: s.transport || 'tcp',
+				incompat:  nodeIncompat(kernel, type, security)
 			};
 		}) };
 	});
@@ -193,8 +205,8 @@ function parseLines(t) {
 function getRules() {
 	return loadConf().then(function () {
 		return Promise.all([
-			fs.read('/etc/kanno/rules/force_proxy.txt').catch(function () { return ''; }),
-			fs.read('/etc/kanno/rules/force_direct.txt').catch(function () { return ''; })
+			out('/bin/sh', ['-c', 'cat /etc/kanno/rules/force_proxy.txt 2>/dev/null']),
+			out('/bin/sh', ['-c', 'cat /etc/kanno/rules/force_direct.txt 2>/dev/null'])
 		]).then(function (f) {
 			return {
 				geosite_cn:     uci.get(CONF, 'rules', 'geosite_cn') || 'DIRECT',
@@ -217,8 +229,8 @@ function saveRules(p) {
 		['commit', CONF]
 	]).then(function () {
 		return Promise.all([
-			fs.write('/etc/kanno/rules/force_proxy.txt', fp),
-			fs.write('/etc/kanno/rules/force_direct.txt', fd)
+			exec('/bin/sh', ['-c', 'cat > /etc/kanno/rules/force_proxy.txt <<\'KANNOEOF\'\n' + fp + 'KANNOEOF']),
+			exec('/bin/sh', ['-c', 'cat > /etc/kanno/rules/force_direct.txt <<\'KANNOEOF\'\n' + fd + 'KANNOEOF'])
 		]);
 	}).then(refresh).then(function () { return { ok: true }; })
 	  .catch(function (e) { return { ok: false, error: String(e && e.message || e) }; });
@@ -292,11 +304,14 @@ function getKernels() {
 	return Promise.all([
 		kernelVer('/usr/bin/mihomo', '-v'),
 		kernelVer('/usr/bin/sing-box', 'version'),
-		Promise.all([
-			fs.read('/etc/kanno/geodata/version').then(function (t) { return (t || '').trim(); }).catch(function () { return ''; }),
-			fs.stat('/etc/kanno/geodata/geoip.dat').then(function () { return 'yes'; }).catch(function () { return 'no'; }),
-			fs.stat('/etc/kanno/geodata/geosite.dat').then(function () { return 'yes'; }).catch(function () { return 'no'; })
-		]).then(function (a) { return { version: a[0], geoip: a[1], geosite: a[2] }; })
+		out('/bin/sh', ['-c',
+			'cat /etc/kanno/geodata/version 2>/dev/null;' +
+			'echo "|";test -f /etc/kanno/geodata/geoip.dat && echo yes || echo no;' +
+			'echo "|";test -f /etc/kanno/geodata/geosite.dat && echo yes || echo no'
+		]).then(function (t) {
+			var a = (t || '').split('|');
+			return { version: (a[0] || '').trim(), geoip: (a[1] || 'no').trim(), geosite: (a[2] || 'no').trim() };
+		})
 	]).then(function (a) { return { mihomo: a[0], singbox: a[1], geodata: a[2] }; });
 }
 function updateKernel(p) {
@@ -312,13 +327,10 @@ function updateKernel(p) {
 function getLogs(p) {
 	var n = parseInt(p.lines, 10) || 100;
 	if (n > 500) n = 500;
-	return fs.read_direct(LOG, 'text')
-		.catch(function () { return fs.read(LOG).catch(function () { return ''; }); })
-		.then(function (txt) {
-			var lines = (txt || '').replace(/\s+$/, '').split('\n').filter(function (l) { return l.length; });
-			if (lines.length > n) lines = lines.slice(lines.length - n);
-			return { lines: lines };
-		});
+	return out('/bin/sh', ['-c', 'tail -n ' + n + ' ' + LOG + ' 2>/dev/null']).then(function (txt) {
+		var lines = (txt || '').split('\n').filter(function (l) { return l.length; });
+		return { lines: lines };
+	});
 }
 
 /* ── Traffic (mihomo connections API) ──────────── */
@@ -464,6 +476,21 @@ function installUpload(p) {
 	});
 }
 
+/* ── Active-node selection (mihomo "PROXY" selector group) ─────── */
+function getProxyOptions() {
+	return out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/proxies/PROXY']).then(function (s) {
+		try { var o = JSON.parse(s); return { now: o.now || '', all: o.all || [] }; }
+		catch (e) { return { now: '', all: [] }; }
+	});
+}
+function selectNode(p) {
+	var name = (p.name || '').trim();
+	if (!name) return Promise.resolve({ ok: false, error: 'no name' });
+	return exec('/usr/bin/curl', ['-s', '-X', 'PUT', '--max-time', '3',
+		'http://127.0.0.1:9090/proxies/PROXY', '-d', JSON.stringify({ name: name })])
+		.then(function (r) { return { ok: r.code === 0 }; });
+}
+
 var DISPATCH = {
 	get_status: getStatus, get_nodes: getNodes, add_node: addNode, del_node: delNode,
 	toggle_node: toggleNode, test_node: testNode, test_all_nodes: testAll,
@@ -473,7 +500,8 @@ var DISPATCH = {
 	update_kernel: updateKernel, get_logs: getLogs, clear_log: clearLog,
 	get_traffic: getTraffic, check_access: checkAccess, check_site: checkSite,
 	set_mode: setMode, install_upload: installUpload,
-	get_node: getNode, edit_node: editNode
+	get_node: getNode, edit_node: editNode,
+	get_proxy_options: getProxyOptions, select_node: selectNode
 };
 
 return baseclass.extend({

@@ -6,6 +6,11 @@
 NFT_TABLE="kanno"
 MARK_BYPASS=0x100
 MARK_ROUTE=0x200
+# Must equal `routing-mark` in gen_mihomo.sh (768). The kernel stamps every one
+# of its own outbound sockets with this fwmark; we return early on it so the
+# kernel's DNS lookups and DIRECT connections are never redirected back into
+# tproxy (which would loop infinitely).
+MARK_SELF=768
 
 nft_add() { nft add "$@" 2>/dev/null; }
 
@@ -53,6 +58,7 @@ table inet ${NFT_TABLE} {
     # Skip traffic from kanno itself (TUN outbound)
     chain output_mangle {
         type route hook output priority mangle; policy accept;
+        meta mark ${MARK_SELF} return comment "kanno kernel self-traffic bypass"
         meta skgid 53690 return comment "kanno process bypass"
         ip daddr @bypass_ip4 return
         ip daddr @force_direct_ip4 return
@@ -80,6 +86,37 @@ add_cn_ip() {
     nft add element inet "$NFT_TABLE" cn_ip4 "{ $ip }" 2>/dev/null
 }
 
+add_bypass_ip() {
+    nft add element inet "$NFT_TABLE" bypass_ip4 "{ $1 }" 2>/dev/null
+}
+
+# Bypass proxy node server IPs so the kernel's own outbound connection to a
+# node is reached DIRECTLY and never re-proxied through tproxy. Without this
+# the kernel connecting to its own upstream loops infinitely back into 7893.
+bypass_node_servers() {
+    local servers s ip
+    servers=$(uci show kanno 2>/dev/null | sed -n "s/^kanno\.proxy_[0-9a-f]*\.server='\([^']*\)'.*/\1/p" | sort -u)
+    for s in $servers; do
+        [ -z "$s" ] && continue
+        case "$s" in
+        *:*)
+            : # IPv6 server — bypass set is ipv4-only, skip
+            ;;
+        *[a-zA-Z]*)
+            # Domain server: resolve via a direct upstream DNS (NOT mihomo's
+            # fake-ip on :53) so we record the node's real IP.
+            for ip in $(nslookup "$s" 223.5.5.5 2>/dev/null | awk '/^Address[: ]?/{print $NF}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.'); do
+                add_bypass_ip "$ip"
+            done
+            ;;
+        *)
+            add_bypass_ip "$s"
+            ;;
+        esac
+    done
+    log_info "node server IPs bypassed (loop prevention)"
+}
+
 # Load custom rule lists into nftables sets
 load_custom_rules() {
     [ -f "${RULES_DIR}/force_proxy_ip.txt" ] && \
@@ -90,6 +127,7 @@ load_custom_rules() {
         grep -v '^#' "${RULES_DIR}/force_direct_ip.txt" | grep -v '^$' | while read -r ip; do
             add_force_direct_ip "$ip"
         done
+    bypass_node_servers
     log_info "custom IP rules loaded"
 }
 

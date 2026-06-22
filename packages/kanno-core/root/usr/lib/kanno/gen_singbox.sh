@@ -2,6 +2,7 @@
 # KannoProxy - generate sing-box config.json from UCI
 
 . /usr/lib/kanno/common.sh
+. /usr/lib/kanno/capabilities.sh
 
 _u() { uci -q get "kanno.$1" 2>/dev/null; }
 
@@ -89,6 +90,25 @@ emit_singbox_proxy() {
         printf ',\n      "username": %s' "$(json_str "$(_u "${sec}.username")")"
         printf ',\n      "password": %s' "$(json_str "$(_u "${sec}.password")")"
         ;;
+    anytls)
+        printf ',\n      "type": "anytls"'
+        printf ',\n      "password": %s' "$(json_str "$(_u "${sec}.password")")"
+        local security=$(_u "${sec}.security")
+        if [ "$security" = "reality" ]; then
+            printf ',\n      "tls": {'
+            printf '\n        "enabled": true,'
+            printf '\n        "server_name": %s,' "$(json_str "$(_u "${sec}.sni")")"
+            printf '\n        "utls": {"enabled": true, "fingerprint": %s},' "$(json_str "${_u "${sec}.fp":-chrome}")"
+            printf '\n        "reality": {"enabled": true, "public_key": %s, "short_id": %s}' \
+                "$(json_str "$(_u "${sec}.pbk")")" "$(json_str "$(_u "${sec}.sid")")"
+            printf '\n      }'
+        else
+            printf ',\n      "tls": {"enabled": true, "server_name": %s' "$(json_str "$(_u "${sec}.sni")")"
+            local fp=$(_u "${sec}.fp")
+            [ -n "$fp" ] && printf ', "utls": {"enabled": true, "fingerprint": %s}' "$(json_str "$fp")"
+            printf '}'
+        fi
+        ;;
     esac
     printf '\n    }'
 }
@@ -120,6 +140,11 @@ generate_singbox_config() {
     uci show kanno 2>/dev/null | grep "^kanno\.proxy_.*\.type=" | while read -r line; do
         local sec=$(echo "$line" | cut -d'.' -f2)
         [ "$(_u "${sec}.enabled")" = "0" ] && continue
+        case " ${KANNO_EXCLUDE:-} " in
+            *" $sec "*) log_warn "excluding node $(_u "${sec}.name"): failed config validation"; continue ;;
+        esac
+        local reason
+        reason=$(kanno_node_incompat singbox "$sec") || { log_warn "skipping node $(_u "${sec}.name"): $reason"; continue; }
         [ "$first" = "0" ] && printf ','
         printf '\n'
         emit_singbox_proxy "$sec"

@@ -2,6 +2,7 @@
 # KannoProxy - main control command
 
 . /usr/lib/kanno/common.sh
+. /usr/lib/kanno/capabilities.sh
 . /usr/lib/kanno/uri_parser.sh
 . /usr/lib/kanno/gen_mihomo.sh
 . /usr/lib/kanno/gen_singbox.sh
@@ -9,37 +10,88 @@
 . /usr/lib/kanno/dns.sh
 . /usr/lib/kanno/updater.sh
 
-_kernel() { uci -q get kanno.global.kernel 2>/dev/null; echo "mihomo"; }
+_kernel() { uci -q get kanno.global.kernel 2>/dev/null || echo "mihomo"; }
+
+# Validate the on-disk config for the active kernel (0 = valid).
+_validate_config() {
+    case "$1" in
+    singbox) "$SINGBOX_BIN" check -c "$SINGBOX_CFG" >/tmp/kanno-cfgtest.log 2>&1 ;;
+    *)       "$MIHOMO_BIN" -d "$GEODATA_DIR" -f "$MIHOMO_CFG" -t >/tmp/kanno-cfgtest.log 2>&1 ;;
+    esac
+}
+
+# Validate ONE node in isolation (0 = the kernel accepts it).
+_validate_node() {
+    local kernel="$1" sec="$2"
+    case "$kernel" in
+    singbox)
+        { printf '{"log":{"level":"fatal"},"outbounds":['; emit_singbox_proxy "$sec"; printf ']}'; } > /tmp/kanno-nodetest.json
+        "$SINGBOX_BIN" check -c /tmp/kanno-nodetest.json >/dev/null 2>&1 ;;
+    *)
+        { printf 'mixed-port: 17890\nproxies:\n'; emit_proxy "$sec"; } > /tmp/kanno-nodetest.yaml
+        "$MIHOMO_BIN" -d "$GEODATA_DIR" -f /tmp/kanno-nodetest.yaml -t >/dev/null 2>&1 ;;
+    esac
+}
+
+# Echo section ids of every enabled+compatible node that FAILS validation.
+_find_invalid_nodes() {
+    local kernel="$1" sec
+    for sec in $(uci show kanno 2>/dev/null | sed -n "s/^kanno\.\(proxy_[0-9a-f]*\)\.type=.*/\1/p"); do
+        [ "$(uci -q get "kanno.${sec}.enabled" 2>/dev/null)" = "0" ] && continue
+        kanno_node_incompat "$kernel" "$sec" >/dev/null 2>&1 || continue
+        _validate_node "$kernel" "$sec" || printf '%s ' "$sec"
+    done
+}
 
 start_kernel() {
     local kernel=$(_kernel)
-    local pid_running
+    local bin cfg
+    [ "$kernel" = "singbox" ] || kernel="mihomo"
 
-    case "$kernel" in
-    singbox)
-        write_config() { . /usr/lib/kanno/gen_singbox.sh; write_config; }
+    if [ "$kernel" = "singbox" ]; then
+        bin="$SINGBOX_BIN"; cfg="$SINGBOX_CFG"
         . /usr/lib/kanno/gen_singbox.sh
-        write_config "$SINGBOX_CFG"
-        if [ ! -x "$SINGBOX_BIN" ]; then
-            log_error "sing-box not found, run: kanno update singbox"
-            return 1
-        fi
-        "$SINGBOX_BIN" run -c "$SINGBOX_CFG" -D "$GEODATA_DIR" &
-        echo $! > "$SINGBOX_PID"
-        log_info "sing-box started (pid $!)"
-        ;;
-    *)
+    else
+        bin="$MIHOMO_BIN"; cfg="$MIHOMO_CFG"
         . /usr/lib/kanno/gen_mihomo.sh
-        write_config "$MIHOMO_CFG"
-        if [ ! -x "$MIHOMO_BIN" ]; then
-            log_error "mihomo not found, run: kanno update mihomo"
+    fi
+
+    if [ ! -x "$bin" ]; then
+        log_error "$kernel not found, run: kanno update $kernel"
+        return 1
+    fi
+
+    # gen already skips kernel-incompatible nodes via the capability matrix.
+    unset KANNO_EXCLUDE
+    write_config "$cfg"
+
+    # Safety net: if the config still fails to validate (e.g. a malformed field
+    # the matrix can't see), drop the offending node(s) and regenerate so the
+    # remaining good nodes still come up instead of the whole kernel dying.
+    if ! _validate_config "$kernel"; then
+        local bad
+        bad=$(_find_invalid_nodes "$kernel")
+        if [ -n "$bad" ]; then
+            log_warn "dropping node(s) that failed validation: $bad"
+            KANNO_EXCLUDE="$bad"
+            write_config "$cfg"
+            unset KANNO_EXCLUDE
+        fi
+        if ! _validate_config "$kernel"; then
+            log_error "$kernel config invalid, not starting:"
+            grep -iE 'error|fatal' /tmp/kanno-cfgtest.log | head -3 | while read -r l; do log_error "  $l"; done
             return 1
         fi
-        "$MIHOMO_BIN" -d "$GEODATA_DIR" -f "$MIHOMO_CFG" &
+    fi
+
+    if [ "$kernel" = "singbox" ]; then
+        "$bin" run -c "$cfg" -D "$GEODATA_DIR" &
+        echo $! > "$SINGBOX_PID"
+    else
+        "$bin" -d "$GEODATA_DIR" -f "$cfg" &
         echo $! > "$MIHOMO_PID"
-        log_info "mihomo started (pid $!)"
-        ;;
-    esac
+    fi
+    log_info "$kernel started (pid $!)"
 }
 
 stop_kernel() {
@@ -49,8 +101,9 @@ stop_kernel() {
         kill "$pid" 2>/dev/null && log_info "stopped pid $pid"
         rm -f "$pid_file"
     done
-    # Fallback kill
-    killall -q mihomo sing-box 2>/dev/null
+    killall mihomo sing-box 2>/dev/null
+    sleep 1
+    killall -9 mihomo sing-box 2>/dev/null
 }
 
 reload_kernel() {
@@ -70,14 +123,25 @@ reload_kernel() {
 }
 
 kanno_start() {
+    local lockfile="/tmp/kanno.lock"
+    if [ -f "$lockfile" ]; then
+        local lock_pid=$(cat "$lockfile" 2>/dev/null)
+        if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+            log_info "another kanno instance is running (pid $lock_pid), skip"
+            return 0
+        fi
+        rm -f "$lockfile"
+    fi
+    echo $$ > "$lockfile"
     log_info "KannoProxy starting..."
-    start_kernel || return 1
+    start_kernel || { rm -f "$lockfile"; return 1; }
     sleep 1
     setup_routing
     load_nftables
     load_custom_rules
     setup_dns
     log_info "KannoProxy started"
+    rm -f "$lockfile"
 }
 
 kanno_stop() {

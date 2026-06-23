@@ -1,7 +1,8 @@
 'use strict';
+'require baseclass';
 
 /* Kernel-specific UI capabilities — keep in sync with tomfly-core dataplane logic. */
-return {
+return baseclass.extend({
 	normalize: function (kernel, versionHint) {
 		var k = (kernel || '').toString().toLowerCase().replace(/-/g, '');
 		if (k === 'singbox') return 'singbox';
@@ -31,4 +32,4 @@ return {
 			'class': 'tomfly-pill tomfly-kernel-pill ' + (p.kernel === 'singbox' ? 'tomfly-pill-sb' : 'tomfly-pill-mh')
 		}, p.label);
 	}
-};
+});

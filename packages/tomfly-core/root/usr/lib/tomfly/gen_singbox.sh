@@ -192,7 +192,8 @@ generate_singbox_config() {
     done < "$usable" > "$names"
 
     printf '{\n'
-    printf '  "log": {"level": %s, "timestamp": true},\n' "$(json_str "$loglevel")"
+    printf '  "log": {"level": %s, "timestamp": true, "output": %s},\n' \
+        "$(json_str "$loglevel")" "$(json_str "$TOMFLY_LOG")"
     printf '  "dns": {\n'
     printf '    "servers": [\n'
     printf '      {"tag": "cn-dns", "type": "udp", "server": %s},\n' "$(json_str "$domestic")"

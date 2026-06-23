@@ -2,10 +2,19 @@
 
 /* Kernel-specific UI capabilities — keep in sync with tomfly-core dataplane logic. */
 return {
-	profile: function (kernel) {
-		var sb = kernel === 'singbox';
+	normalize: function (kernel, versionHint) {
+		var k = (kernel || '').toString().toLowerCase().replace(/-/g, '');
+		if (k === 'singbox') return 'singbox';
+		if (versionHint && /sing-box|singbox/i.test(String(versionHint)))
+			return 'singbox';
+		return 'mihomo';
+	},
+
+	profile: function (kernel, versionHint) {
+		var id = this.normalize(kernel, versionHint);
+		var sb = id === 'singbox';
 		return {
-			kernel: sb ? 'singbox' : 'mihomo',
+			kernel: id,
 			label: sb ? 'sing-box' : 'mihomo',
 			tunConfigurable: !sb,
 			tunAlwaysOn: sb,
@@ -16,8 +25,8 @@ return {
 		};
 	},
 
-	badge: function (kernel) {
-		var p = this.profile(kernel);
+	badge: function (kernel, versionHint) {
+		var p = this.profile(kernel, versionHint);
 		return E('span', {
 			'class': 'tomfly-pill tomfly-kernel-pill ' + (p.kernel === 'singbox' ? 'tomfly-pill-sb' : 'tomfly-pill-mh')
 		}, p.label);

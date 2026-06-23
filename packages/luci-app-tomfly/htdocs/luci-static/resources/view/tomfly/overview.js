@@ -60,9 +60,9 @@ return view.extend({
 	statusInner: function (s, activeNode) {
 		s = s || {};
 		var running = !!s.running;
-		var kp = kprof.profile(s.kernel || 'mihomo');
+		var kp = kprof.profile(s.kernel, s.version);
 		return [
-			kprof.badge(kp.kernel),
+			kprof.badge(kp.kernel, s.version),
 			E('span', { 'class': 'tomfly-pill ' + (running ? 'tomfly-pill-on' : 'tomfly-pill-off') }, [
 				E('span', { 'class': 'tomfly-dot' }), running ? _('Running') : _('Stopped')
 			]),
@@ -145,8 +145,8 @@ return view.extend({
 	render: function (data) {
 		var s = data[0] || {}, traffic = data[1] || {};
 		var global = data[2] || {}, dns = data[3] || {};
-		var kernel = global.kernel || s.kernel || 'mihomo';
-		var kp = kprof.profile(kernel);
+		var kernel = kprof.normalize(global.kernel || s.kernel, s.version);
+		var kp = kprof.profile(kernel, s.version);
 
 		var statusCard = E('div', { 'class': 'tomfly-card' }, [
 			E('div', { 'class': 'tomfly-card-title' }, _('Service Status')),
@@ -212,35 +212,13 @@ return view.extend({
 		]);
 		dnsSelect.value = dns.mode || 'fake-ip';
 
-		var tunCheck = E('input', { 'type': 'checkbox', 'id': 'tomfly-tun', 'style': 'margin-right:6px' });
+		var tunCheck = null;
 		if (kp.tunConfigurable) {
+			tunCheck = E('input', { 'type': 'checkbox', 'id': 'tomfly-tun', 'style': 'margin-right:6px' });
 			tunCheck.checked = global.tun !== false;
-		} else {
-			tunCheck.checked = true;
-			tunCheck.disabled = true;
 		}
 
-		var tunFieldInner = [
-			E('label', {
-				'style': 'display:flex;align-items:flex-start;cursor:' + (kp.tunConfigurable ? 'pointer' : 'default')
-			}, [
-				tunCheck,
-				E('span', {}, kp.tunConfigurable
-					? _('Use TUN instead of TPROXY (kernel manages routing)')
-					: _('Always TUN (interface TomFly) — sing-box does not support TPROXY'))
-			])
-		];
-		if (!kp.tunConfigurable) {
-			tunFieldInner.push(E('div', { 'class': 'tomfly-kernel-note' },
-				_('This option only applies to mihomo. Change kernel on the Kernel page.')));
-		}
-
-		var settingsCard = E('div', { 'class': 'tomfly-card' }, [
-			E('div', { 'class': 'tomfly-card-title' }, _('Quick Settings')),
-			kp.tunAlwaysOn ? E('div', { 'class': 'tomfly-kernel-banner' }, [
-				E('strong', {}, _('sing-box dataplane: ')),
-				_('Traffic is always captured via TUN (TomFly). The TUN toggle below is disabled.')
-			]) : '',
+		var settingsRows = [
 			E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('Proxy Mode')),
 				E('div', { 'class': 'cbi-value-field' }, [modeSelect])
@@ -248,21 +226,50 @@ return view.extend({
 			E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('DNS Mode')),
 				E('div', { 'class': 'cbi-value-field' }, [dnsSelect])
+			])
+		];
+
+		if (kp.tunConfigurable) {
+			settingsRows.push(E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('TUN Mode')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('label', { 'style': 'display:flex;align-items:flex-start;cursor:pointer' }, [
+						tunCheck,
+						E('span', {}, _('Use TUN instead of TPROXY (kernel manages routing)'))
+					])
+				])
+			]));
+		} else {
+			settingsRows.push(E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Data Plane')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('div', { 'class': 'tomfly-kernel-note' }, [
+						E('strong', {}, _('TUN only')),
+						' — ',
+						_('sing-box always captures traffic via TUN (interface TomFly). TPROXY is not available.')
+					])
+				])
+			]));
+		}
+
+		var settingsCard = E('div', { 'class': 'tomfly-card' }, [
+			E('div', { 'class': 'tomfly-card-title' }, [
+				_('Quick Settings'),
+				' ',
+				kprof.badge(kernel, s.version)
 			]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', {
-					'class': 'cbi-value-title',
-					'style': kp.tunConfigurable ? '' : 'opacity:.7'
-				}, _('TUN Mode')),
-				E('div', { 'class': 'cbi-value-field' + (kp.tunConfigurable ? '' : ' tomfly-field-disabled') }, tunFieldInner)
-			]),
+			kp.tunAlwaysOn ? E('div', { 'class': 'tomfly-kernel-banner' }, [
+				E('strong', {}, _('sing-box: ')),
+				_('No TUN toggle here — sing-box always runs in TUN mode.')
+			]) : '',
+		].concat(settingsRows).concat([
 			E('div', { 'style': 'text-align:right;margin-top:6px' }, [
 				E('button', {
 					'class': 'cbi-button cbi-button-save important',
 					'click': ui.createHandlerFn(this, 'handleSaveSettings')
 				}, _('Save & Restart'))
 			])
-		]);
+		]));
 
 		var quick = E('div', { 'class': 'tomfly-card' }, [
 			E('div', { 'class': 'tomfly-card-title' }, _('Quick Add Node')),

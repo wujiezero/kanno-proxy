@@ -109,11 +109,13 @@ start_kernel() {
         fi
     fi
 
+    # Detach stdout/stderr from the invoking shell (SSH session). sing-box also
+    # writes to log.output in config.json; this catches anything still on fd 1/2.
     if [ "$kernel" = "singbox" ]; then
-        "$bin" run -c "$cfg" -D "$GEODATA_DIR" &
+        "$bin" run -c "$cfg" -D "$GEODATA_DIR" >>"$TOMFLY_LOG" 2>&1 &
         echo $! > "$SINGBOX_PID"
     else
-        "$bin" -d "$GEODATA_DIR" -f "$cfg" &
+        "$bin" -d "$GEODATA_DIR" -f "$cfg" >>"$TOMFLY_LOG" 2>&1 &
         echo $! > "$MIHOMO_PID"
     fi
     log_info "$kernel started (pid $!)"

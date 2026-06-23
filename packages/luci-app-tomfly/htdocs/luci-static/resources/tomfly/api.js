@@ -333,13 +333,27 @@ function getLogs(p) {
 	});
 }
 
-/* ── Traffic (mihomo connections API) ──────────── */
-function parseMemoryKb(raw) {
+/* ── Traffic (mihomo/sing-box Clash API) ──────────── */
+function parseMemoryBytes(connMem, raw) {
+	if (connMem != null && connMem > 0) return connMem;
 	if (!raw) return 0;
+	var lines = (raw || '').split('\n');
+	var max = 0;
+	var i, line, m, v;
+	for (i = 0; i < lines.length; i++) {
+		line = lines[i].trim();
+		if (!line) continue;
+		try {
+			m = JSON.parse(line);
+			v = m.inuse != null ? m.inuse : (m.memory != null ? m.memory : 0);
+			if (v > max) max = v;
+		} catch (e) {}
+	}
+	if (max > 0) return max;
 	try {
-		var m = JSON.parse(raw);
+		m = JSON.parse((raw || '').trim());
 		if (typeof m === 'number') return m;
-		if (m.inuse != null) return m.inuse;
+		if (m.inuse != null) return m.inuse * 1024;
 		if (m.memory != null) return m.memory;
 	} catch (e) {}
 	return 0;
@@ -348,21 +362,22 @@ function getTraffic() {
 	return Promise.all([
 		out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/connections']),
 		out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/proxies/PROXY']),
-		out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/memory'])
+		out('/usr/bin/curl', ['-sf', '--max-time', '3', 'http://127.0.0.1:9090/memory'])
 	]).then(function (a) {
 		var traffic = { up: 0, down: 0, conns: 0, mem: 0, activeNode: '' };
+		var connMem;
 		try {
 			var o = JSON.parse(a[0]);
 			traffic.up = o.uploadTotal || 0;
 			traffic.down = o.downloadTotal || 0;
 			traffic.conns = Array.isArray(o.connections) ? o.connections.length : 0;
-			if (o.memory) traffic.mem = o.memory;
+			if (o.memory != null) connMem = o.memory;
 		} catch (e) {}
 		try {
 			var p = JSON.parse(a[1]);
 			traffic.activeNode = p.now || '';
 		} catch (e) {}
-		if (!traffic.mem) traffic.mem = parseMemoryKb(a[2]) * 1024;
+		traffic.mem = parseMemoryBytes(connMem, a[2]);
 		return traffic;
 	});
 }

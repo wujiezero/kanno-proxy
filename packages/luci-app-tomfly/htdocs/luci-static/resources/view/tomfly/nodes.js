@@ -27,28 +27,27 @@ return view.extend({
 	},
 
 	nodeCard: function (n) {
-		var self = this;
 		return E('div', { 'class': 'tomfly-node' + (n.enabled ? '' : ' off'), 'data-id': n.id }, [
 			E('div', { 'class': 'tomfly-node-head' }, [
 				E('span', { 'class': 'tomfly-badge ' + (n.type || '') }, (n.type || '?').toUpperCase()),
 				E('span', { 'class': 'tomfly-node-name' }, n.name || '(unnamed)'),
+				E('span', { 'class': 'tomfly-addr' }, (n.server || '') + ':' + (n.port || '')),
+				E('span', { 'class': 'tomfly-meta' }, [
+					E('span', {}, (n.security && n.security !== 'none') ? n.security : 'no-tls'),
+					E('span', {}, n.transport || 'tcp')
+				]),
 				E('span', { 'class': 'tomfly-lat ' + latClass(n.latency) }, n.latency ? n.latency + 'ms' : '—')
 			]),
-			E('div', { 'class': 'tomfly-addr' }, (n.server || '') + ':' + (n.port || '')),
-			E('div', { 'class': 'tomfly-meta' }, [
-				E('span', {}, (n.security && n.security !== 'none') ? n.security : 'no-tls'),
-				E('span', {}, n.transport || 'tcp')
-			]),
-			n.incompat ? E('div', { 'class': 'tomfly-node-warn', 'title': n.incompat }, [
-				E('span', {}, '⚠ ' + _('Incompatible with current kernel: ') + n.incompat)
-			]) : '',
-			E('div', { 'class': 'tomfly-actions', 'style': 'justify-content:flex-end' }, [
+			E('div', { 'class': 'tomfly-actions' }, [
 				(n.enabled && !n.incompat) ? E('button', { 'class': 'cbi-button cbi-button-positive', 'click': ui.createHandlerFn(this, 'handleSetActive', n) }, _('Use')) : '',
 				E('button', { 'class': 'cbi-button cbi-button-action', 'click': ui.createHandlerFn(this, 'handleTest', n.id) }, _('Test')),
 				E('button', { 'class': 'cbi-button cbi-button-neutral', 'click': ui.createHandlerFn(this, 'handleEdit', n.id) }, _('Edit')),
 				E('button', { 'class': 'cbi-button cbi-button-neutral', 'click': ui.createHandlerFn(this, 'handleToggle', n) }, n.enabled ? _('Disable') : _('Enable')),
 				E('button', { 'class': 'cbi-button cbi-button-remove', 'click': ui.createHandlerFn(this, 'handleDelete', n) }, _('Delete'))
-			])
+			]),
+			n.incompat ? E('div', { 'class': 'tomfly-node-warn', 'title': n.incompat }, [
+				E('span', {}, '⚠ ' + _('Incompatible with current kernel: ') + n.incompat)
+			]) : ''
 		]);
 	},
 

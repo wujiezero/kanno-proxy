@@ -504,13 +504,43 @@ function getNode(p) {
 	});
 }
 
-/* ── Kernel upload install (file already in /tmp via cgi-io) */
+/* ── Kernel / geodata upload install (file already in /tmp via cgi-io) */
 function installUpload(p) {
 	var target = p.target;
+	var src = '/tmp/tomfly-upload.bin';
+	var geodir = '/etc/tomfly/geodata';
+
+	if (target === 'geodata') {
+		var kind = p.kind || 'bundle';
+		if (kind !== 'bundle' && kind !== 'geoip' && kind !== 'geosite')
+			return Promise.resolve({ ok: false, error: 'invalid geodata kind' });
+		var cmd = 'src=' + src + '; dir=' + geodir + '; T=/tmp/tomfly-gd-$$; '
+			+ 'mkdir -p "$dir" "$T"; ok=0; '
+			+ '_one() { local name="$1"; local dest="$dir/$name"; '
+			+ '  if gzip -dc "$src" > "$dest" 2>/dev/null; then ok=$((ok+1)); return 0; fi; '
+			+ '  cp "$src" "$dest" && ok=$((ok+1)); }; '
+			+ 'if [ "' + kind + '" = "geoip" ]; then _one geoip.dat; '
+			+ 'elif [ "' + kind + '" = "geosite" ]; then _one geosite.dat; '
+			+ 'else '
+			+ '  if tar -xzf "$src" -C "$T" 2>/dev/null || tar -xf "$src" -C "$T" 2>/dev/null; then '
+			+ '    gip=$(find "$T" -type f -name geoip.dat 2>/dev/null | head -1); '
+			+ '    gst=$(find "$T" -type f -name geosite.dat 2>/dev/null | head -1); '
+			+ '    [ -n "$gip" ] && cp "$gip" "$dir/geoip.dat" && ok=$((ok+1)); '
+			+ '    [ -n "$gst" ] && cp "$gst" "$dir/geosite.dat" && ok=$((ok+1)); '
+			+ '  fi; '
+			+ 'fi; '
+			+ 'rm -rf "$T" "$src"; '
+			+ 'if [ "$ok" -gt 0 ]; then date "+%Y-%m-%d" > "$dir/version"; exit 0; fi; '
+			+ 'echo "no geodata files found in upload" >&2; exit 1';
+		return exec('/bin/sh', ['-c', cmd]).then(function (r) {
+			if (r.code === 0) return { ok: true };
+			return { ok: false, error: (r.stderr || r.stdout || 'install failed').split('\n')[0] };
+		});
+	}
+
 	if (target !== 'mihomo' && target !== 'singbox')
 		return Promise.resolve({ ok: false, error: 'invalid target' });
 	var dest = target === 'mihomo' ? '/usr/bin/mihomo' : '/usr/bin/sing-box';
-	var src = '/tmp/tomfly-upload.bin';
 	var cmd = 'T=/tmp/tomfly-ext-$$; U=/tmp/tomfly-ungz-$$; mkdir -p "$T"; '
 		+ 'if tar -xzf ' + src + ' -C "$T" 2>/dev/null; then '
 		+ '  F=$(find "$T" -type f ! -name "*.sha256" | head -1); '

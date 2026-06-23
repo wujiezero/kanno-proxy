@@ -50,10 +50,10 @@ return view.extend({
 					'class': 'cbi-button cbi-button-action important',
 					'click': ui.createHandlerFn(this, 'handleUpdate', target)
 				}, _('Update online')),
-				target !== 'geodata' ? E('button', {
+				E('button', {
 					'class': 'cbi-button cbi-button-action',
 					'click': ui.createHandlerFn(this, 'handleUpload', target)
-				}, _('Upload')) : ''
+				}, _('Upload'))
 			])
 		]);
 	},
@@ -149,7 +149,10 @@ return view.extend({
 				}
 				L.resolveDefault(api.call('get_kernels'), {}).then(function (k) {
 					var info = k[target] || k[target === 'singbox' ? 'singbox' : target] || {};
-					if (info.installed) {
+					var done = target === 'geodata'
+						? (info.geoip === 'yes' && info.geosite === 'yes')
+						: !!info.installed;
+					if (done) {
 						window.clearInterval(poll);
 						ui.hideModal();
 						notify(E('p', target + ' ' + _('updated successfully')), 4000);
@@ -164,14 +167,25 @@ return view.extend({
 	},
 
 	handleUpload: function (target) {
+		var self = this;
+		var isGeo = target === 'geodata';
+		var kindSelect = isGeo ? E('select', {
+			'class': 'cbi-input-select', 'id': 'tomfly-geodata-kind', 'style': 'width:100%;margin:8px 0'
+		}, [
+			E('option', { value: 'bundle' }, _('Archive with geoip.dat + geosite.dat (.tar.gz)')),
+			E('option', { value: 'geoip' }, _('GeoIP only (geoip.dat or .gz)')),
+			E('option', { value: 'geosite' }, _('GeoSite only (geosite.dat or .gz)'))
+		]) : null;
 		var fileInput = E('input', {
 			'type': 'file',
-			'accept': '.gz,.tar.gz,.tgz',
+			'accept': isGeo ? '.dat,.gz,.tar,.tar.gz,.tgz' : '.gz,.tar.gz,.tgz',
 			'style': 'margin:10px 0'
 		});
 		ui.showModal(_('Upload ') + target, [
-			E('p', { 'class': 'tomfly-muted' },
-				_('Select the compressed kernel binary (.gz or .tar.gz)')),
+			E('p', { 'class': 'tomfly-muted' }, isGeo
+				? _('Upload Loyalsoldier/v2ray-rules-dat release files for mihomo GeoIP/GeoSite rules.')
+				: _('Select the compressed kernel binary (.gz or .tar.gz)')),
+			isGeo ? kindSelect : '',
 			fileInput,
 			E('div', { 'class': 'right', 'style': 'margin-top:14px' }, [
 				E('button', {
@@ -184,6 +198,8 @@ return view.extend({
 					'click': ui.createHandlerFn(this, function () {
 						var file = fileInput.files && fileInput.files[0];
 						if (!file) return;
+						var kindEl = document.getElementById('tomfly-geodata-kind');
+						var kind = (kindEl && kindEl.value) || 'bundle';
 						ui.showModal(_('Uploading…'), [
 							E('p', { 'class': 'spinning' }, _('Uploading file…'))
 						]);
@@ -199,9 +215,13 @@ return view.extend({
 									? 'cgi-io not available (apk add cgi-io)'
 									: 'HTTP ' + res.status);
 							ui.showModal(_('Installing…'), [
-								E('p', { 'class': 'spinning' }, _('Decompressing and installing…'))
+								E('p', { 'class': 'spinning' }, isGeo
+									? _('Installing geodata…')
+									: _('Decompressing and installing…'))
 							]);
-							return api.call('install_upload', { target: target });
+							var payload = { target: target };
+							if (isGeo) payload.kind = kind;
+							return api.call('install_upload', payload);
 						}).then(function (r) {
 							ui.hideModal();
 							if (r && r.ok) {

@@ -343,14 +343,15 @@ check_kernel_version() {
 
 # Update TomFly shell scripts from GitHub (jsDelivr may be unreachable on the router).
 TOMFLY_REPO="wujiezero/TomFly"
-TOMFLY_REF="${TOMFLY_REF:-main}"
+# Pin a commit hash — jsDelivr @main lags hours behind; override: TOMFLY_REF=main tomfly update core
+TOMFLY_REF="${TOMFLY_REF:-fcb85ee}"
 
 _tf_fetch_script() {
     local relpath="$1" dest="$2" mode="${3:-755}" base url
     local tmp="${dest}.tomfly_tmp"
     for base in \
-        "https://raw.githubusercontent.com/${TOMFLY_REPO}/${TOMFLY_REF}" \
         "https://cdn.jsdelivr.net/gh/${TOMFLY_REPO}@${TOMFLY_REF}" \
+        "https://raw.githubusercontent.com/${TOMFLY_REPO}/${TOMFLY_REF}" \
         "https://ghfast.top/https://raw.githubusercontent.com/${TOMFLY_REPO}/${TOMFLY_REF}"
     do
         url="${base}/${relpath}"

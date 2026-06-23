@@ -356,12 +356,13 @@ function getTraffic() {
 			traffic.up = o.uploadTotal || 0;
 			traffic.down = o.downloadTotal || 0;
 			traffic.conns = Array.isArray(o.connections) ? o.connections.length : 0;
+			if (o.memory) traffic.mem = o.memory;
 		} catch (e) {}
 		try {
 			var p = JSON.parse(a[1]);
 			traffic.activeNode = p.now || '';
 		} catch (e) {}
-		traffic.mem = parseMemoryKb(a[2]) * 1024;
+		if (!traffic.mem) traffic.mem = parseMemoryKb(a[2]) * 1024;
 		return traffic;
 	});
 }

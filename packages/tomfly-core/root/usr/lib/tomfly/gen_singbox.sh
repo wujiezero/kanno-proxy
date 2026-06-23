@@ -166,6 +166,7 @@ generate_singbox_config() {
     local geosite_cn=$(_u "rules.geosite_cn"); geosite_cn="${geosite_cn:-DIRECT}"
     local geoip_cn=$(_u "rules.geoip_cn"); geoip_cn="${geoip_cn:-DIRECT}"
     local default_policy=$(_u "rules.default_policy"); default_policy="${default_policy:-PROXY}"
+    local sb_mode=$(_u "global.mode"); sb_mode="${sb_mode:-rule}"
     local domestic=$(_sb_first_list "dns.domestic_dns" "223.5.5.5")
     local foreign=$(_sb_first_list "dns.foreign_dns" "8.8.8.8")
     local dns_port=$(_u "dns.listen_port"); dns_port="${dns_port:-1053}"
@@ -288,6 +289,10 @@ generate_singbox_config() {
     printf '      "enabled": true,\n'
     printf '      "path": "%s/singbox-cache.db",\n' "$TOMFLY_RUN"
     printf '      "store_fakeip": true\n'
+    printf '    },\n'
+    printf '    "clash_api": {\n'
+    printf '      "external_controller": "127.0.0.1:9090",\n'
+    printf '      "default_mode": %s\n' "$(json_str "$sb_mode")"
     printf '    }\n'
     printf '  }\n'
     printf '}\n'

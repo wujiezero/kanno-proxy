@@ -4,53 +4,31 @@
  * hex fallbacks, so the UI matches both the light and dark LuCI themes.
  */
 
-.tomfly { animation: tomfly-fade .25s ease; }
+.tomfly {
+	animation: tomfly-fade .25s ease;
+	position: relative;
+	padding-top: 8px;
+	padding-right: 108px;
+	min-height: 100px;
+}
 @keyframes tomfly-fade {
 	from { opacity: 0; transform: translateY(6px); }
 	to   { opacity: 1; transform: none; }
 }
 
-/* ── Brand header ───────────────────────────────────────── */
-.tomfly-brand {
-	margin-bottom: 16px;
-	padding: 12px 16px;
-	border-radius: 12px;
-	border: 1px solid var(--border-color-medium, #e5e7eb);
-	background: linear-gradient(135deg,
-		rgba(99, 102, 241, .06) 0%,
-		var(--background-color-high, #fff) 55%);
-}
-.tomfly-brand-main {
-	display: flex;
-	align-items: center;
-	gap: 14px;
-	flex-wrap: wrap;
-}
-.tomfly-logo {
-	width: 56px;
-	height: 56px;
+/* ── Corner logo (100×100, top-right) ───────────────────── */
+.tomfly-logo-corner {
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: 100px;
+	height: 100px;
+	max-width: 100px;
+	max-height: 100px;
 	object-fit: contain;
-	flex-shrink: 0;
-}
-.tomfly-brand-text { min-width: 0; }
-.tomfly-brand-title {
-	font-size: 22px;
-	font-weight: 800;
-	letter-spacing: -.02em;
-	line-height: 1.15;
-}
-.tomfly-brand-tagline {
-	font-size: 12px;
-	color: var(--text-color-low, #8a8a8a);
-	margin-top: 2px;
-}
-.tomfly-brand-page {
-	margin-top: 10px;
-	padding-top: 8px;
-	border-top: 1px solid var(--border-color-medium, #e5e7eb);
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text-color-medium, #555);
+	pointer-events: none;
+	opacity: .88;
+	z-index: 1;
 }
 
 /* ── Layout ─────────────────────────────────────────────── */

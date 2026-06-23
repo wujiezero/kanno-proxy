@@ -3,7 +3,6 @@
 'require ui';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
-'require tomfly.brand as brand';
 
 document.querySelector('head').appendChild(E('link', {
 	'rel': 'stylesheet', 'type': 'text/css',
@@ -54,7 +53,7 @@ return view.extend({
 				_('GeoSite/GeoIP CN rules use local geodata files under /etc/tomfly/geodata/.')
 			]);
 
-		return brand.page(_('Routing Rules'), [
+		return E('div', { 'class': 'tomfly' }, [
 			geoBanner,
 			E('div', { 'class': 'tomfly-grid-2' }, [
 				E('div', { 'class': 'tomfly-card' }, [

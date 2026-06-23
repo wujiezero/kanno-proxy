@@ -4,7 +4,6 @@
 'require dom';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
-'require tomfly.brand as brand';
 
 document.querySelector('head').appendChild(E('link', {
 	'rel': 'stylesheet', 'type': 'text/css',
@@ -93,7 +92,7 @@ return view.extend({
 		var kernel = (data[2] || {}).kernel || 'mihomo';
 		var self = this;
 
-		return brand.page(_('Proxy Groups'), [
+		return E('div', { 'class': 'tomfly' }, [
 			E('div', { 'class': 'tomfly-kernel-banner warn' }, [
 				E('strong', {}, kprof.profile(kernel).label + ': '),
 				_('Custom groups on this page are saved to UCI but not yet applied to the running config. ' +

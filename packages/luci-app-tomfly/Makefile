@@ -39,8 +39,6 @@ define Package/luci-app-tomfly/install
 	$(1)/www/luci-static/resources/tomfly/
   $(INSTALL_DATA) ./htdocs/luci-static/resources/tomfly/kernel-profile.js \
 	$(1)/www/luci-static/resources/tomfly/
-  $(INSTALL_DATA) ./htdocs/luci-static/resources/tomfly/brand.js \
-	$(1)/www/luci-static/resources/tomfly/
   $(INSTALL_DATA) ./htdocs/luci-static/resources/view/tomfly/style.css \
 	$(1)/www/luci-static/resources/view/tomfly/
   $(INSTALL_DATA) ./htdocs/luci-static/resources/view/tomfly/logo.png \

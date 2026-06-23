@@ -4,16 +4,26 @@
  * hex fallbacks, so the UI matches both the light and dark LuCI themes.
  */
 
-.tomfly {
-	animation: tomfly-fade .25s ease;
-	position: relative;
-}
+.tomfly { animation: tomfly-fade .25s ease; }
 @keyframes tomfly-fade {
 	from { opacity: 0; transform: translateY(6px); }
 	to   { opacity: 1; transform: none; }
 }
 
-/* Logo box: see tomfly/brand.js (injected + inline) */
+/* ── Overview status logo ───────────────────────────────── */
+.tomfly-status-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.tomfly-status-logo {
+	width: 26px;
+	height: 26px;
+	max-width: 26px;
+	max-height: 26px;
+	object-fit: contain;
+	flex: 0 0 auto;
+}
 
 /* ── Layout ─────────────────────────────────────────────── */
 .tomfly-grid {

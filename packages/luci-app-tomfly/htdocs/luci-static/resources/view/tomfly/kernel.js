@@ -4,7 +4,6 @@
 'require request';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
-'require tomfly.brand as brand';
 
 document.querySelector('head').appendChild(E('link', {
 	'rel': 'stylesheet', 'type': 'text/css',
@@ -129,7 +128,7 @@ return view.extend({
 		kernelSelect.addEventListener('change', updateKernelNote);
 		window.setTimeout(updateKernelNote, 0);
 
-		return brand.page(_('Kernel & GeoData'), [
+		return E('div', { 'class': 'tomfly' }, [
 			E('div', { 'class': 'tomfly-card' }, [
 				E('div', { 'class': 'tomfly-card-title' }, [
 					_('Global Settings'),

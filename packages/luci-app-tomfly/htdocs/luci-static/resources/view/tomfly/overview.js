@@ -5,7 +5,6 @@
 'require dom';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
-'require tomfly.brand as brand';
 
 document.querySelector('head').appendChild(E('link', {
 	'rel': 'stylesheet', 'type': 'text/css',
@@ -150,7 +149,14 @@ return view.extend({
 		var kp = kprof.profile(kernel, s.version);
 
 		var statusCard = E('div', { 'class': 'tomfly-card' }, [
-			E('div', { 'class': 'tomfly-card-title' }, _('Service Status')),
+			E('div', { 'class': 'tomfly-card-title tomfly-status-title' }, [
+				E('img', {
+					'class': 'tomfly-status-logo',
+					'src': L.resource('view/tomfly/logo.png'),
+					'alt': 'TomFly'
+				}),
+				E('span', {}, _('Service Status'))
+			]),
 			E('div', { 'id': 'tomfly-status', 'class': 'tomfly-row' }, this.statusInner(s, traffic.activeNode))
 		]);
 
@@ -302,7 +308,7 @@ return view.extend({
 			}, this));
 		}, this), 3);
 
-		return brand.page(_('Overview'), [
+		return E('div', { 'class': 'tomfly' }, [
 			statusCard, trafficGrid,
 			E('div', { 'class': 'tomfly-grid-2' }, [accessCard, settingsCard]),
 			quick

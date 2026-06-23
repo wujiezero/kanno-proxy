@@ -3,7 +3,6 @@
 'require ui';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
-'require tomfly.brand as brand';
 
 document.querySelector('head').appendChild(E('link', {
 	'rel': 'stylesheet', 'type': 'text/css',
@@ -51,7 +50,7 @@ return view.extend({
 			]));
 		}
 
-		return brand.page(_('DNS Settings'), banners.concat([
+		return E('div', { 'class': 'tomfly' }, banners.concat([
 			E('div', { 'class': 'tomfly-card' }, [
 				E('div', { 'class': 'tomfly-card-title' }, [
 					_('DNS Settings'),

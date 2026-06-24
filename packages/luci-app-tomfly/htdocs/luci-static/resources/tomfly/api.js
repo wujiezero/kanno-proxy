@@ -378,10 +378,13 @@ function parseMemoryBytes(connMem, raw) {
 	return 0;
 }
 function getTraffic() {
+	/* /connections already carries up/down totals AND memory; mihomo's /memory
+	   is a streaming endpoint that never closes, so curling it always burns the
+	   full --max-time (~3s every call → the slow Overview load). Drop it and read
+	   memory from /connections. */
 	return Promise.all([
 		out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/connections']),
-		out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/proxies/PROXY']),
-		out('/usr/bin/curl', ['-sf', '--max-time', '3', 'http://127.0.0.1:9090/memory'])
+		out('/usr/bin/curl', ['-sf', '--max-time', '2', 'http://127.0.0.1:9090/proxies/PROXY'])
 	]).then(function (a) {
 		var traffic = { up: 0, down: 0, conns: 0, mem: 0, activeNode: '' };
 		var connMem;
@@ -396,7 +399,7 @@ function getTraffic() {
 			var p = JSON.parse(a[1]);
 			traffic.activeNode = p.now || '';
 		} catch (e) {}
-		traffic.mem = parseMemoryBytes(connMem, a[2]);
+		traffic.mem = parseMemoryBytes(connMem, '');
 		return traffic;
 	});
 }

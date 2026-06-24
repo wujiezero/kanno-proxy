@@ -3,30 +3,21 @@
 'require ui';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
+'require tomfly.widgets as widgets';
 
-document.querySelector('head').appendChild(E('link', {
-	'rel': 'stylesheet', 'type': 'text/css',
-	'href': L.resource('view/tomfly/style.css')
-}));
+widgets.mount();
 
 function notify(content, ms) {
 	var el = ui.addNotification(null, content);
 	if (ms > 0) window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms);
 }
 
-function row(label, field, desc) {
-	return E('div', { 'class': 'cbi-value' }, [
-		E('label', { 'class': 'cbi-value-title' }, label),
-		E('div', { 'class': 'cbi-value-field' },
-			desc ? [field, E('div', { 'class': 'cbi-value-description' }, desc)] : [field])
+function field(label, control, hint) {
+	return E('div', {}, [
+		E('div', { 'class': 'tomfly-flabel', 'style': 'margin-top:0' }, label),
+		control,
+		hint ? E('div', { 'class': 'tomfly-fhint' }, hint) : ''
 	]);
-}
-
-function select(id, value, opts) {
-	var el = E('select', { 'class': 'cbi-input-select', 'id': id },
-		opts.map(function (o) { return E('option', { 'value': o[0] }, o[1]); }));
-	el.value = value;
-	return el;
 }
 
 return view.extend({
@@ -44,37 +35,49 @@ return view.extend({
 		var banners = [];
 
 		if (kp.dnsFirstOnly) {
-			banners.push(E('div', { 'class': 'tomfly-kernel-banner warn' }, [
+			banners.push(widgets.banner('warn', [
 				E('strong', {}, _('sing-box: ')),
 				_('Only the first domestic and foreign DNS server in each list is written to config.')
 			]));
+		} else {
+			banners.push(widgets.banner('info', [
+				E('strong', {}, _('mihomo: ')),
+				_('DNS resolution strategy. Fake-IP effectively prevents DNS pollution — recommended.')
+			]));
 		}
 
-		return E('div', { 'class': 'tomfly' }, banners.concat([
+		var modeSelect = E('select', { 'class': 'tomfly-select', 'id': 'k-dns-mode' }, [
+			E('option', { 'value': 'fake-ip' }, _('Fake-IP (recommended, anti-pollution)')),
+			E('option', { 'value': 'redir-host' }, _('Redir-Host (compatibility)'))
+		]);
+		modeSelect.value = d.mode || 'fake-ip';
+
+		var portInput = E('input', { 'class': 'tomfly-input', 'id': 'k-dns-port', 'type': 'number', 'value': d.listen_port || 1053 });
+
+		var domestic = E('textarea', { 'class': 'tomfly-textarea', 'id': 'k-dns-dom', 'rows': 4, 'placeholder': '114.114.114.114\n223.5.5.5' },
+			(d.domestic_dns || []).join('\n'));
+		var foreign = E('textarea', { 'class': 'tomfly-textarea', 'id': 'k-dns-for', 'rows': 4, 'placeholder': '8.8.8.8\n1.1.1.1' },
+			(d.foreign_dns || []).join('\n'));
+
+		return E('div', { 'class': 'tomfly-app' }, [
+			widgets.nav('dns', [kprof.badge(kernel)])
+		].concat(banners).concat([
 			E('div', { 'class': 'tomfly-card' }, [
-				E('div', { 'class': 'tomfly-card-title' }, [
-					_('DNS Settings'),
-					' ',
+				E('div', { 'class': 'tomfly-card-head', 'style': 'margin-bottom:20px' }, [
+					E('div', { 'class': 'tomfly-card-title' }, _('DNS Settings')),
 					kprof.badge(kernel)
 				]),
-				row(_('DNS Mode'),
-					select('k-dns-mode', d.mode || 'fake-ip', [
-						['fake-ip', _('Fake-IP (recommended, anti-pollution)')],
-						['redir-host', _('Redir-Host (compatibility)')]
-					])),
-				row(_('Listen Port'),
-					E('input', { 'class': 'cbi-input-text', 'id': 'k-dns-port', 'type': 'number', 'value': d.listen_port || 1053 })),
-				row(_('Domestic DNS'),
-					E('textarea', { 'class': 'cbi-input-textarea', 'id': 'k-dns-dom', 'rows': 4, 'style': 'width:100%', 'placeholder': '114.114.114.114\n223.5.5.5' },
-						(d.domestic_dns || []).join('\n')),
-					_('Resolved directly. One server per line.')),
-				row(_('Foreign DNS'),
-					E('textarea', { 'class': 'cbi-input-textarea', 'id': 'k-dns-for', 'rows': 4, 'style': 'width:100%', 'placeholder': '8.8.8.8\n1.1.1.1' },
-						(d.foreign_dns || []).join('\n')),
-					_('Resolved through the proxy. One server per line.'))
+				E('div', { 'class': 'tomfly-grid-2' }, [
+					field(_('DNS Mode'), modeSelect),
+					field(_('Listen Port'), portInput)
+				]),
+				E('div', { 'class': 'tomfly-grid-2', 'style': 'margin-top:18px' }, [
+					field(_('Domestic DNS'), domestic, _('Resolved directly. One server per line.')),
+					field(_('Foreign DNS'), foreign, _('Resolved through the proxy. One server per line.'))
+				])
 			]),
-			E('div', { 'class': 'cbi-page-actions' }, [
-				E('button', { 'class': 'cbi-button cbi-button-save important', 'click': ui.createHandlerFn(this, 'handleSaveDns') }, _('Save'))
+			E('div', { 'class': 'tomfly-actions-end' }, [
+				E('button', { 'class': 'tomfly-btn tomfly-btn-primary', 'click': ui.createHandlerFn(this, 'handleSaveDns') }, _('Save'))
 			])
 		]));
 	},

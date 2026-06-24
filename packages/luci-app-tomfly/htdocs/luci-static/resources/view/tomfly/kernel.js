@@ -4,29 +4,26 @@
 'require request';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
+'require tomfly.widgets as widgets';
 
-document.querySelector('head').appendChild(E('link', {
-	'rel': 'stylesheet', 'type': 'text/css',
-	'href': L.resource('view/tomfly/style.css')
-}));
+widgets.mount();
 
 function notify(content, ms) {
 	var el = ui.addNotification(null, content);
 	if (ms > 0) window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms);
 }
 
-function row(label, field) {
-	return E('div', { 'class': 'cbi-value' }, [
-		E('label', { 'class': 'cbi-value-title' }, label),
-		E('div', { 'class': 'cbi-value-field' }, [field])
-	]);
-}
-
 function select(id, value, opts) {
-	var el = E('select', { 'class': 'cbi-input-select', 'id': id },
+	var el = E('select', { 'class': 'tomfly-select', 'id': id },
 		opts.map(function (o) { return E('option', { 'value': o[0] }, o[1]); }));
 	el.value = value;
 	return el;
+}
+
+function frow(label, field) {
+	return E('div', { 'class': 'tomfly-frow' }, [
+		E('div', { 'class': 'tomfly-frow-label' }, label), field
+	]);
 }
 
 function geoUpdateDone(target, geo) {
@@ -62,75 +59,40 @@ return view.extend({
 		]);
 	},
 
-	kernelCard: function (badge, cls, name, ver, installed, target, statusText) {
-		return E('div', { 'class': 'tomfly-card tomfly-kernel' }, [
-			E('div', { 'class': 'tomfly-kernel-badge tomfly-ic-' + cls }, badge),
-			E('div', { 'class': 'tomfly-kernel-name' }, name),
-			E('div', { 'class': 'tomfly-kernel-ver' }, ver || _('not installed')),
-			E('div', { 'style': 'margin-bottom:10px' }, [
-				E('span', { 'class': 'tomfly-pill ' + (installed ? 'tomfly-pill-on' : 'tomfly-pill-off') }, statusText)
-			]),
-			E('div', { 'class': 'tomfly-actions', 'style': 'justify-content:center' }, [
-				E('button', {
-					'class': 'cbi-button cbi-button-action important',
-					'click': ui.createHandlerFn(this, 'handleUpdate', target)
-				}, _('Update online')),
-				E('button', {
-					'class': 'cbi-button cbi-button-action',
-					'click': ui.createHandlerFn(this, 'handleUpload', target)
-				}, _('Upload'))
-			])
+	kcardActions: function (target) {
+		return E('div', { 'class': 'tomfly-kcard-actions' }, [
+			E('button', { 'class': 'tomfly-btn tomfly-btn-sm tomfly-btn-primary', 'click': ui.createHandlerFn(this, 'handleUpdate', target) }, _('Update online')),
+			E('button', { 'class': 'tomfly-btn tomfly-btn-sm tomfly-btn-ghost', 'click': ui.createHandlerFn(this, 'handleUpload', target) }, _('Upload'))
 		]);
 	},
 
-	coreCard: function () {
-		return E('div', { 'class': 'tomfly-card tomfly-core-bar' }, [
-			E('div', { 'class': 'tomfly-row tomfly-core-bar-row' }, [
-				E('div', { 'class': 'tomfly-core-bar-main' }, [
-					E('div', { 'class': 'tomfly-kernel-badge tomfly-ic-indigo tomfly-core-badge' }, 'T'),
-					E('div', {}, [
-						E('div', { 'class': 'tomfly-core-bar-title' }, 'TomFly'),
-						E('div', { 'class': 'tomfly-muted tomfly-core-bar-desc' },
-							_('Core scripts, LuCI UI & updater'))
-					])
-				]),
-				E('button', {
-					'class': 'cbi-button cbi-button-action important',
-					'click': ui.createHandlerFn(this, 'handleUpdate', 'core')
-				}, _('Update online'))
-			])
+	statusPill: function (ok, text) {
+		return E('span', { 'class': 'tomfly-kstatus ' + (ok ? 'ok' : 'off') }, [
+			ok ? widgets.icon('check', 12) : '', text
 		]);
 	},
 
-	geoCard: function (badge, cls, title, kernelLabel, files, version, ok, target, statusText) {
-		return E('div', { 'class': 'tomfly-card tomfly-kernel tomfly-geo-card' }, [
-			E('div', { 'class': 'tomfly-kernel-badge tomfly-ic-' + cls }, badge),
-			E('div', { 'class': 'tomfly-kernel-name' }, title),
-			E('div', { 'class': 'tomfly-kernel-sub' }, [
-				E('span', { 'class': 'tomfly-muted' }, _('Kernel: ')),
-				kernelLabel
-			]),
-			E('ul', { 'class': 'tomfly-geo-files' }, files.map(function (f) {
-				return E('li', {}, [
-					E('code', {}, f.name),
-					' — ',
-					f.desc
-				]);
+	kernelCard: function (letter, color, name, ver, installed, target, statusText) {
+		return E('div', { 'class': 'tomfly-card tomfly-kcard' }, [
+			E('div', { 'class': 'tomfly-avatar tomfly-avatar-' + color }, letter),
+			E('div', { 'class': 'tomfly-kcard-name' }, name),
+			E('div', { 'class': 'tomfly-kcard-desc' }, ver || _('not installed')),
+			this.statusPill(installed, statusText),
+			this.kcardActions(target)
+		]);
+	},
+
+	geoCard: function (letter, color, title, kernelLabel, files, version, ok, target, statusText) {
+		return E('div', { 'class': 'tomfly-card tomfly-kcard' }, [
+			E('div', { 'class': 'tomfly-avatar tomfly-avatar-' + color }, letter),
+			E('div', { 'class': 'tomfly-kcard-name' }, title),
+			E('div', { 'class': 'tomfly-kcard-desc' }, _('Kernel: ') + kernelLabel),
+			E('div', { 'class': 'tomfly-kcard-files' }, files.map(function (f) {
+				return E('div', { 'class': 'tomfly-kcard-file' }, '• ' + f.name + ' — ' + f.desc);
 			})),
-			E('div', { 'class': 'tomfly-kernel-ver' }, version ? (_('Updated: ') + version) : _('not installed')),
-			E('div', { 'style': 'margin-bottom:10px' }, [
-				E('span', { 'class': 'tomfly-pill ' + (ok ? 'tomfly-pill-on' : 'tomfly-pill-off') }, statusText)
-			]),
-			E('div', { 'class': 'tomfly-actions', 'style': 'justify-content:center' }, [
-				E('button', {
-					'class': 'cbi-button cbi-button-action important',
-					'click': ui.createHandlerFn(this, 'handleUpdate', target)
-				}, _('Update online')),
-				E('button', {
-					'class': 'cbi-button cbi-button-action',
-					'click': ui.createHandlerFn(this, 'handleUpload', target)
-				}, _('Upload'))
-			])
+			E('div', { 'class': 'tomfly-kcard-updated' }, version ? (_('Updated: ') + version) : _('not installed')),
+			this.statusPill(ok, statusText),
+			this.kcardActions(target)
 		]);
 	},
 
@@ -145,53 +107,58 @@ return view.extend({
 		var kernelSelect = select('k-kernel', kernel, [
 			['mihomo', 'mihomo ' + _('(recommended)')], ['singbox', 'sing-box']
 		]);
-		var kernelNote = E('div', { 'class': 'tomfly-kernel-note', 'id': 'k-kernel-note' });
+		var kernelNote = E('div', { 'class': 'tomfly-frow-note', 'id': 'k-kernel-note' });
 		var updateKernelNote = function () {
 			var sel = document.getElementById('k-kernel');
 			var kp = kprof.profile((sel && sel.value) || kernel);
-			if (kp.tunAlwaysOn) {
-				kernelNote.textContent = _(
-					'sing-box always uses TUN (interface TomFly) for traffic capture. ' +
-					'mihomo can switch between TPROXY and TUN on the Overview page.');
-			} else {
-				kernelNote.textContent = _(
-					'mihomo defaults to TPROXY; enable TUN on the Overview page if you prefer kernel-managed routing. ' +
-					'sing-box only supports TUN mode.');
-			}
+			kernelNote.textContent = kp.tunAlwaysOn
+				? _('sing-box always uses TUN (interface TomFly) for traffic capture. mihomo can switch between TPROXY and TUN on the Overview page.')
+				: _('mihomo defaults to TPROXY; enable TUN on the Overview page if you prefer kernel-managed routing. sing-box only supports TUN mode.');
 		};
 		kernelSelect.addEventListener('change', updateKernelNote);
 		window.setTimeout(updateKernelNote, 0);
 
-		var geoHint = _(
-			'Each kernel uses different files — install only what you need, or both if you switch kernels.');
+		var geoHint = _('Each kernel uses different files — install only what you need, or both if you switch kernels.');
 
-		return E('div', { 'class': 'tomfly' }, [
+		return E('div', { 'class': 'tomfly-app' }, [
+			widgets.nav('kernel', [kprof.badge(kernel)]),
+
 			E('div', { 'class': 'tomfly-card' }, [
-				E('div', { 'class': 'tomfly-card-title' }, [
-					_('Global Settings'),
-					' ',
+				E('div', { 'class': 'tomfly-card-head', 'style': 'margin-bottom:8px' }, [
+					E('div', { 'class': 'tomfly-card-title' }, _('Global Settings')),
 					kprof.badge(kernel)
 				]),
-				row(_('Active Kernel'), E('div', {}, [kernelSelect, kernelNote])),
-				row(_('Proxy Mode'), select('k-mode', g.mode || 'rule', [
-					['rule', _('Rule')], ['global', _('Global')], ['direct', _('Direct')]
-				])),
-				row(_('Log Level'), select('k-log', g.log_level || 'info', [
-					['silent', 'Silent'], ['error', 'Error'], ['warning', 'Warning'], ['info', 'Info'], ['debug', 'Debug']
-				])),
-				E('div', { 'class': 'cbi-value', 'style': 'border:none' }, [
-					E('label', { 'class': 'cbi-value-title' }, ''),
-					E('div', { 'class': 'cbi-value-field' }, [
-						E('button', { 'class': 'cbi-button cbi-button-save important', 'click': ui.createHandlerFn(this, 'handleSaveGlobal') }, _('Save'))
+				E('div', { 'style': 'max-width:560px' }, [
+					frow(_('Active Kernel'), kernelSelect),
+					kernelNote,
+					frow(_('Proxy Mode'), select('k-mode', g.mode || 'rule', [
+						['rule', _('Rule')], ['global', _('Global')], ['direct', _('Direct')]
+					])),
+					frow(_('Log Level'), select('k-log', g.log_level || 'info', [
+						['silent', 'Silent'], ['error', 'Error'], ['warning', 'Warning'], ['info', 'Info'], ['debug', 'Debug']
+					])),
+					E('div', { 'style': 'margin-top:16px' }, [
+						E('button', { 'class': 'tomfly-btn tomfly-btn-primary', 'click': ui.createHandlerFn(this, 'handleSaveGlobal') }, _('Save'))
 					])
 				])
 			]),
-			this.coreCard(),
-			E('div', { 'class': 'tomfly-kernel-section-head' }, [
-				E('span', { 'class': 'tomfly-card-title tomfly-kernel-section-label' }, _('Kernels')),
-				E('span', { 'class': 'tomfly-card-title tomfly-kernel-section-label' }, _('Geo Rules / GeoData')),
-				E('span', { 'class': 'tomfly-section-hint', 'title': geoHint }, geoHint)
+
+			E('div', { 'class': 'tomfly-card tomfly-core-bar tomfly-mt' }, [
+				E('div', { 'class': 'tomfly-core-l' }, [
+					E('div', { 'class': 'tomfly-avatar tomfly-avatar-accent' }, 'T'),
+					E('div', {}, [
+						E('div', { 'class': 'tomfly-core-name' }, 'TomFly'),
+						E('div', { 'class': 'tomfly-core-desc' }, _('Core scripts, LuCI UI & updater'))
+					])
+				]),
+				E('button', { 'class': 'tomfly-btn tomfly-btn-primary', 'click': ui.createHandlerFn(this, 'handleUpdate', 'core') }, _('Update online'))
 			]),
+
+			E('div', { 'class': 'tomfly-section-head' }, [
+				E('div', { 'class': 'tomfly-eyebrow' }, _('Kernels · Geo Rules / GeoData')),
+				E('div', { 'class': 'tomfly-section-hint' }, geoHint)
+			]),
+
 			E('div', { 'class': 'tomfly-grid-4' }, [
 				this.kernelCard('M', 'blue', 'mihomo', mihomo.version, mihomo.installed, 'mihomo',
 					mihomo.installed ? _('installed') : _('not installed')),
@@ -205,8 +172,7 @@ return view.extend({
 				this.geoCard('R', 'red', _('sing-box Rule-Sets'), 'sing-box', [
 					{ name: 'geoip-cn.srs', desc: _('GeoIP CN (local rule-set)') },
 					{ name: 'geosite-cn.srs', desc: _('GeoSite CN (local rule-set)') }
-				], geo.version, geoSrsOk, 'geodata_singbox',
-					srsStatusText(srsModeVal))
+				], geo.version, geoSrsOk, 'geodata_singbox', srsStatusText(srsModeVal))
 			])
 		]);
 	},
@@ -287,25 +253,19 @@ return view.extend({
 		var kindSelect = null;
 
 		if (isGeoMihomo) {
-			kindSelect = E('select', {
-				'class': 'cbi-input-select', 'id': 'tomfly-geodata-kind', 'style': 'width:100%;margin:8px 0'
-			}, [
+			kindSelect = E('select', { 'class': 'tomfly-select', 'id': 'tomfly-geodata-kind', 'style': 'margin:8px 0' }, [
 				E('option', { value: 'bundle' }, _('Both files (archive or upload twice)')),
 				E('option', { value: 'geoip' }, 'geoip.dat'),
 				E('option', { value: 'geosite' }, 'geosite.dat')
 			]);
 		} else if (isGeoSingbox) {
-			kindSelect = E('select', {
-				'class': 'cbi-input-select', 'id': 'tomfly-geodata-kind', 'style': 'width:100%;margin:8px 0'
-			}, [
+			kindSelect = E('select', { 'class': 'tomfly-select', 'id': 'tomfly-geodata-kind', 'style': 'margin:8px 0' }, [
 				E('option', { value: 'bundle' }, _('Both files (archive or upload twice)')),
 				E('option', { value: 'geoip_srs' }, 'geoip-cn.srs'),
 				E('option', { value: 'geosite_srs' }, 'geosite-cn.srs')
 			]);
 		} else if (target === 'geodata') {
-			kindSelect = E('select', {
-				'class': 'cbi-input-select', 'id': 'tomfly-geodata-kind', 'style': 'width:100%;margin:8px 0'
-			}, [
+			kindSelect = E('select', { 'class': 'tomfly-select', 'id': 'tomfly-geodata-kind', 'style': 'margin:8px 0' }, [
 				E('option', { value: 'bundle' }, _('All four files (.tar.gz)')),
 				E('option', { value: 'geoip' }, 'mihomo: geoip.dat'),
 				E('option', { value: 'geosite' }, 'mihomo: geosite.dat'),
@@ -334,68 +294,63 @@ return view.extend({
 		}
 
 		ui.showModal(_('Upload ') + target, [
-			E('p', { 'class': 'tomfly-muted' }, hint),
-			isGeoSingbox ? E('p', { 'class': 'tomfly-kernel-note' }, [
-				E('strong', {}, 'geoip-cn.srs: '),
-				'https://cdn.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-cn.srs',
-				E('br'),
-				E('strong', {}, 'geosite-cn.srs: '),
-				'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-cn.srs'
-			]) : '',
-			kindSelect,
-			fileInput,
-			E('div', { 'class': 'right', 'style': 'margin-top:14px' }, [
-				E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Cancel')),
-				' ',
-				E('button', {
-					'class': 'cbi-button cbi-button-save important',
-					'click': ui.createHandlerFn(this, function () {
-						var file = fileInput.files && fileInput.files[0];
-						if (!file) return;
-						var kindEl = document.getElementById('tomfly-geodata-kind');
-						var kind = (kindEl && kindEl.value) || 'bundle';
-						ui.showModal(_('Uploading…'), [
-							E('p', { 'class': 'spinning' }, _('Uploading file…'))
-						]);
-						var fd = new FormData();
-						fd.append('sessionid', L.env.sessionid);
-						fd.append('filename', '/tmp/tomfly-upload.bin');
-						fd.append('filemode', '0600');
-						fd.append('filedata', file);
-						return request.post('/cgi-bin/cgi-upload', fd, {
-							timeout: 120000
-						}).then(function (res) {
-							if (!res.ok)
-								throw new Error(res.status === 404
-									? 'cgi-io not available (apk add cgi-io)'
-									: 'HTTP ' + res.status);
-							var upload = res.json();
-							if (upload && upload.failure)
-								throw new Error(upload.message || 'cgi-io upload failed');
-							ui.showModal(_('Installing…'), [
-								E('p', { 'class': 'spinning' }, isGeo
-									? _('Installing geodata…')
-									: _('Decompressing and installing…'))
+			E('div', { 'class': 'tomfly-modal' }, [
+				E('p', { 'class': 'tomfly-muted' }, hint),
+				isGeoSingbox ? E('p', { 'class': 'tomfly-fhint' }, [
+					E('strong', {}, 'geoip-cn.srs: '),
+					'https://cdn.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-cn.srs',
+					E('br'),
+					E('strong', {}, 'geosite-cn.srs: '),
+					'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-cn.srs'
+				]) : '',
+				kindSelect,
+				fileInput,
+				E('div', { 'class': 'tomfly-modal-actions' }, [
+					E('button', { 'class': 'tomfly-btn tomfly-btn-ghost', 'click': ui.hideModal }, _('Cancel')),
+					E('button', {
+						'class': 'tomfly-btn tomfly-btn-primary',
+						'click': ui.createHandlerFn(this, function () {
+							var file = fileInput.files && fileInput.files[0];
+							if (!file) return;
+							var kindEl = document.getElementById('tomfly-geodata-kind');
+							var kind = (kindEl && kindEl.value) || 'bundle';
+							ui.showModal(_('Uploading…'), [
+								E('p', { 'class': 'spinning' }, _('Uploading file…'))
 							]);
-							var payload = { target: target };
-							if (isGeo) payload.kind = kind;
-							return api.call('install_upload', payload);
-						}).then(function (r) {
-							ui.hideModal();
-							if (r && r.ok) {
-								notify(E('p', target + ' ' + _('installed')), 4000);
-								window.location.reload();
-							} else {
-								ui.addNotification(null,
-									E('p', _('Install failed: ') + ((r && r.error) || '')), 'danger');
-							}
-						}).catch(function (e) {
-							ui.hideModal();
-							ui.addNotification(null,
-								E('p', _('Upload failed: ') + e.message), 'danger');
-						});
-					})
-				}, _('Upload & Install'))
+							var fd = new FormData();
+							fd.append('sessionid', L.env.sessionid);
+							fd.append('filename', '/tmp/tomfly-upload.bin');
+							fd.append('filemode', '0600');
+							fd.append('filedata', file);
+							return request.post('/cgi-bin/cgi-upload', fd, { timeout: 120000 }).then(function (res) {
+								if (!res.ok)
+									throw new Error(res.status === 404
+										? 'cgi-io not available (apk add cgi-io)'
+										: 'HTTP ' + res.status);
+								var upload = res.json();
+								if (upload && upload.failure)
+									throw new Error(upload.message || 'cgi-io upload failed');
+								ui.showModal(_('Installing…'), [
+									E('p', { 'class': 'spinning' }, isGeo ? _('Installing geodata…') : _('Decompressing and installing…'))
+								]);
+								var payload = { target: target };
+								if (isGeo) payload.kind = kind;
+								return api.call('install_upload', payload);
+							}).then(function (r) {
+								ui.hideModal();
+								if (r && r.ok) {
+									notify(E('p', target + ' ' + _('installed')), 4000);
+									window.location.reload();
+								} else {
+									ui.addNotification(null, E('p', _('Install failed: ') + ((r && r.error) || '')), 'danger');
+								}
+							}).catch(function (e) {
+								ui.hideModal();
+								ui.addNotification(null, E('p', _('Upload failed: ') + e.message), 'danger');
+							});
+						})
+					}, _('Upload & Install'))
+				])
 			])
 		]);
 	},

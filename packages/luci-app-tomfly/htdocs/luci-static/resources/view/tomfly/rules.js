@@ -3,32 +3,32 @@
 'require ui';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
+'require tomfly.widgets as widgets';
 
-document.querySelector('head').appendChild(E('link', {
-	'rel': 'stylesheet', 'type': 'text/css',
-	'href': L.resource('view/tomfly/style.css')
-}));
+widgets.mount();
 
 function notify(content, ms) {
 	var el = ui.addNotification(null, content);
 	if (ms > 0) window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms);
 }
 
-function row(label, field, desc) {
-	return E('div', { 'class': 'cbi-value' }, [
-		E('label', { 'class': 'cbi-value-title' }, label),
-		E('div', { 'class': 'cbi-value-field' },
-			desc ? [field, E('div', { 'class': 'cbi-value-description' }, desc)] : [field])
-	]);
-}
-
 function policy(id, value) {
-	var el = E('select', { 'class': 'cbi-input-select', 'id': id }, [
+	var el = E('select', { 'class': 'tomfly-select', 'id': id }, [
 		E('option', { 'value': 'PROXY' }, _('Proxy')),
 		E('option', { 'value': 'DIRECT' }, _('Direct'))
 	]);
 	el.value = value || 'DIRECT';
 	return el;
+}
+
+function policyRow(label, field, desc) {
+	return E('div', { 'class': 'tomfly-setting' }, [
+		E('div', {}, [
+			E('div', { 'class': 'tomfly-setting-label' }, label),
+			desc ? E('div', { 'class': 'tomfly-setting-desc' }, desc) : ''
+		]),
+		field
+	]);
 }
 
 return view.extend({
@@ -43,49 +43,57 @@ return view.extend({
 		var r = data[0] || {};
 		var kernel = (data[1] || {}).kernel || 'mihomo';
 		var kp = kprof.profile(kernel);
-		var geoBanner = kp.geoRemote
-			? E('div', { 'class': 'tomfly-kernel-banner' }, [
-				E('strong', {}, _('sing-box: ')),
-				_('Uses local geoip-cn.srs / geosite-cn.srs under /etc/tomfly/geodata/ when present. Upload them on the Kernel page (sing-box Rule-Sets card) if CDN is unreachable.')
-			])
-			: E('div', { 'class': 'tomfly-kernel-banner' }, [
-				E('strong', {}, _('mihomo: ')),
-				_('GeoSite/GeoIP CN rules use local geodata files under /etc/tomfly/geodata/.')
-			]);
 
-		return E('div', { 'class': 'tomfly' }, [
-			geoBanner,
+		var bannerText = kp.geoRemote
+			? [E('strong', {}, _('sing-box: ')), _('Uses local geoip-cn.srs / geosite-cn.srs under /etc/tomfly/geodata/ when present. Upload them on the Kernel page (sing-box Rule-Sets card) if CDN is unreachable.')]
+			: [E('strong', {}, _('mihomo: ')), _('GeoSite/GeoIP CN rules use local geodata files under /etc/tomfly/geodata/.')];
+
+		var steps = [
+			_('Priority: Force Proxy › Force Direct › GeoSite / GeoIP › Default'),
+			_('One entry per line: domain suffix, full domain, or CIDR'),
+			_('LAN addresses (192.168.x.x …) are always direct'),
+			_('Restart the kernel after saving for changes to take effect')
+		];
+
+		return E('div', { 'class': 'tomfly-app' }, [
+			widgets.nav('rules', [kprof.badge(kernel)]),
+			widgets.banner('info', bannerText),
 			E('div', { 'class': 'tomfly-grid-2' }, [
 				E('div', { 'class': 'tomfly-card' }, [
-					E('div', { 'class': 'tomfly-card-title' }, _('Routing Policy')),
-					row(_('GeoSite CN'), policy('k-geosite', r.geosite_cn)),
-					row(_('GeoIP CN'), policy('k-geoip', r.geoip_cn)),
-					row(_('Default Policy'), policy('k-default', r.default_policy), _('Used when no rule matches.'))
+					E('div', { 'class': 'tomfly-eyebrow', 'style': 'margin-bottom:14px' }, _('Routing Policy')),
+					policyRow(_('GeoSite CN'), policy('k-geosite', r.geosite_cn)),
+					policyRow(_('GeoIP CN'), policy('k-geoip', r.geoip_cn)),
+					policyRow(_('Default Policy'), policy('k-default', r.default_policy), _('Used when no rule matches.'))
 				]),
 				E('div', { 'class': 'tomfly-card' }, [
-					E('div', { 'class': 'tomfly-card-title' }, _('How rules are applied')),
-					E('ul', { 'class': 'tomfly-tips' }, [
-						E('li', {}, _('Force Proxy > Force Direct > GeoSite/GeoIP > Default')),
-						E('li', {}, _('One entry per line: domain suffix, full domain, or CIDR')),
-						E('li', {}, _('LAN addresses (192.168.x.x …) are always direct')),
-						E('li', {}, _('Save then restart for changes to take effect'))
-					])
+					E('div', { 'class': 'tomfly-eyebrow', 'style': 'margin-bottom:14px' }, _('How rules are applied')),
+					E('div', { 'class': 'tomfly-steps' }, steps.map(function (t, i) {
+						return E('div', { 'class': 'tomfly-step' }, [
+							E('span', { 'class': 'tomfly-step-n' }, String(i + 1)), t
+						]);
+					}))
 				])
 			]),
-			E('div', { 'class': 'tomfly-grid-2' }, [
+			E('div', { 'class': 'tomfly-grid-2 mt' }, [
 				E('div', { 'class': 'tomfly-card' }, [
-					E('div', { 'class': 'tomfly-card-title' }, _('Force Proxy')),
-					E('textarea', { 'class': 'cbi-input-textarea', 'id': 'k-fproxy', 'rows': 10, 'style': 'width:100%;font-family:var(--font-mono,monospace)', 'placeholder': 'google.com\n8.8.8.8/32\n*.googleapis.com' },
+					E('div', { 'class': 'tomfly-list-head' }, [
+						E('span', { 'class': 'tomfly-list-dot proxy' }),
+						E('span', { 'class': 'tomfly-card-title' }, _('Force Proxy'))
+					]),
+					E('textarea', { 'class': 'tomfly-textarea', 'id': 'k-fproxy', 'rows': 9, 'placeholder': 'google.com\n8.8.8.8/32\n*.googleapis.com' },
 						(r.force_proxy || []).join('\n'))
 				]),
 				E('div', { 'class': 'tomfly-card' }, [
-					E('div', { 'class': 'tomfly-card-title' }, _('Force Direct')),
-					E('textarea', { 'class': 'cbi-input-textarea', 'id': 'k-fdirect', 'rows': 10, 'style': 'width:100%;font-family:var(--font-mono,monospace)', 'placeholder': 'localserver.home\n192.168.100.0/24' },
+					E('div', { 'class': 'tomfly-list-head' }, [
+						E('span', { 'class': 'tomfly-list-dot direct' }),
+						E('span', { 'class': 'tomfly-card-title' }, _('Force Direct'))
+					]),
+					E('textarea', { 'class': 'tomfly-textarea', 'id': 'k-fdirect', 'rows': 9, 'placeholder': 'localserver.home\n192.168.100.0/24' },
 						(r.force_direct || []).join('\n'))
 				])
 			]),
-			E('div', { 'class': 'cbi-page-actions' }, [
-				E('button', { 'class': 'cbi-button cbi-button-save important', 'click': ui.createHandlerFn(this, 'handleSaveRules') }, _('Save'))
+			E('div', { 'class': 'tomfly-actions-end' }, [
+				E('button', { 'class': 'tomfly-btn tomfly-btn-primary', 'click': ui.createHandlerFn(this, 'handleSaveRules') }, _('Save'))
 			])
 		]);
 	},

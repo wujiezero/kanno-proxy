@@ -5,27 +5,9 @@
 'require dom';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
+'require tomfly.widgets as widgets';
 
-document.querySelector('head').appendChild(E('link', {
-	'rel': 'stylesheet', 'type': 'text/css',
-	'href': L.resource('view/tomfly/style.css')
-}));
-
-function svg(paths) {
-	var s = E('span');
-	s.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-		'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">' +
-		paths + '</svg>';
-	return s.firstChild;
-}
-
-var ICON = {
-	up:    '<polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/>',
-	down:  '<polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/>',
-	link:  '<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
-	mem:   '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
-	total: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'
-};
+widgets.mount();
 
 function notify(content, ms) {
 	var el = ui.addNotification(null, content);
@@ -36,9 +18,20 @@ var _prevUp = 0, _prevDown = 0, _prevTs = 0;
 /* Traffic chart — tracks last 60 samples (~3 min at 3s poll) */
 var _chartUp = [], _chartDown = [], _chartMax = 60;
 var _chartResizeBound = false;
+/* Polls are registered once for the page's lifetime (survives soft-nav
+   re-renders); callbacks no-op when their tab isn't mounted. */
+var _pollsAdded = false;
+
+function cssVar(name, fb) {
+	try {
+		var v = getComputedStyle(document.documentElement).getPropertyValue(name);
+		return (v && v.trim()) || fb;
+	} catch (e) { return fb; }
+}
 
 function hexToRgba(hex, a) {
 	var h = hex.replace('#', '');
+	if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
 	var r = parseInt(h.substring(0, 2), 16);
 	var g = parseInt(h.substring(2, 4), 16);
 	var b = parseInt(h.substring(4, 6), 16);
@@ -49,11 +42,10 @@ function chartColors() {
 	var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 	return {
 		dark: dark,
-		bg:   dark ? '#161b22' : '#f6f8fa',
-		grid: dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)',
-		text: dark ? '#8b949e' : '#6b7280',
-		up:   '#3fb950',
-		down: '#58a6ff'
+		grid: cssVar('--tf-border', dark ? '#243049' : '#e5e9f0'),
+		text: cssVar('--tf-text3', dark ? '#65718a' : '#9aa6b6'),
+		up:   '#10b981',
+		down: cssVar('--tf-accent', dark ? '#7c83f7' : '#5b5bf0')
 	};
 }
 
@@ -73,30 +65,26 @@ function drawChart() {
 	if (!cvs) return;
 	var ctx = cvs.getContext('2d');
 
-	/* Redraw on resize so the high-DPR backing store tracks the layout.
-	   Bound once for the lifetime of the page. */
 	if (!_chartResizeBound) {
 		window.addEventListener('resize', function () { drawChart(); });
 		_chartResizeBound = true;
 	}
 
 	/* Match the backing store to the display size × devicePixelRatio so the
-	   line stays crisp instead of being stretched from a fixed 720×140 buffer. */
+	   line stays crisp instead of being stretched from a fixed buffer. */
 	var dpr = window.devicePixelRatio || 1;
-	var cssW = cvs.clientWidth || 720;
-	var cssH = cvs.clientHeight || 140;
+	var cssW = cvs.clientWidth || 900;
+	var cssH = cvs.clientHeight || 210;
 	var needW = Math.round(cssW * dpr), needH = Math.round(cssH * dpr);
 	if (cvs.width !== needW)  cvs.width = needW;
 	if (cvs.height !== needH) cvs.height = needH;
 	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
 	var w = cssW, h = cssH;
-	var pad = 8, graphH = h - pad * 2;
+	var pad = 10, graphH = h - pad * 2;
 	var c = chartColors();
 
 	ctx.clearRect(0, 0, w, h);
-	ctx.fillStyle = c.bg;
-	ctx.fillRect(0, 0, w, h);
 
 	var max = 1, i;
 	for (i = 0; i < _chartUp.length; i++) {
@@ -110,7 +98,7 @@ function drawChart() {
 	var grids = 2;
 	ctx.lineWidth = 1;
 	ctx.strokeStyle = c.grid;
-	ctx.font = '9px monospace';
+	ctx.font = '11px ui-monospace, monospace';
 	ctx.textAlign = 'left';
 	var lastLabel = null;
 	for (i = 0; i <= grids; i++) {
@@ -121,7 +109,7 @@ function drawChart() {
 		var label = fmtRate(max * (grids - i) / grids, max);
 		if (label !== lastLabel) {
 			ctx.fillStyle = c.text;
-			ctx.fillText(label, 4, y + (i === 0 ? 10 : -3));
+			ctx.fillText(label, 4, y + (i === 0 ? 11 : -4));
 			lastLabel = label;
 		}
 	}
@@ -139,9 +127,8 @@ function drawChart() {
 			if (py < pad) py = pad;
 			pts.push([x, py]);
 		}
-		// semi-transparent gradient fill under the line
 		var grad = ctx.createLinearGradient(0, pad, 0, pad + graphH);
-		grad.addColorStop(0, hexToRgba(color, c.dark ? 0.34 : 0.26));
+		grad.addColorStop(0, hexToRgba(color, c.dark ? 0.30 : 0.22));
 		grad.addColorStop(1, hexToRgba(color, 0));
 		ctx.beginPath();
 		ctx.moveTo(pts[0][0], pad + graphH);
@@ -150,10 +137,9 @@ function drawChart() {
 		ctx.closePath();
 		ctx.fillStyle = grad;
 		ctx.fill();
-		// rounded line on top
 		ctx.beginPath();
 		ctx.strokeStyle = color;
-		ctx.lineWidth = 2.2;
+		ctx.lineWidth = 2.5;
 		ctx.lineJoin = 'round';
 		ctx.lineCap = 'round';
 		ctx.moveTo(pts[0][0], pts[0][1]);
@@ -169,12 +155,38 @@ function fmtSpeed(bps) {
 	if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/s';
 	return (bps / 1048576).toFixed(2) + ' MB/s';
 }
+function splitSpeed(bps) {
+	if (bps < 1024) return [bps.toFixed(0), 'B/s'];
+	if (bps < 1048576) return [(bps / 1024).toFixed(1), 'KB/s'];
+	return [(bps / 1048576).toFixed(2), 'MB/s'];
+}
 
 function fmtBytes(b) {
 	if (b < 1024) return b + ' B';
 	if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
 	if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
 	return (b / 1073741824).toFixed(2) + ' GB';
+}
+function splitBytes(b) {
+	if (b < 1024) return [String(b), 'B'];
+	if (b < 1048576) return [(b / 1024).toFixed(1), 'KB'];
+	if (b < 1073741824) return [(b / 1048576).toFixed(1), 'MB'];
+	return [(b / 1073741824).toFixed(2), 'GB'];
+}
+
+function metric(iconName, iconCls, valParts, label, opts) {
+	opts = opts || {};
+	var val = Array.isArray(valParts)
+		? E('div', { 'class': 'tomfly-metric-val' }, [valParts[0], ' ', E('span', { 'class': 'tomfly-metric-unit' }, valParts[1])])
+		: E('div', { 'class': 'tomfly-metric-val' }, String(valParts));
+	return E('div', {
+		'class': 'tomfly-metric' + (opts.click ? ' clickable' : ''),
+		'title': opts.title || null,
+		'click': opts.click || null
+	}, [
+		E('div', { 'class': 'tomfly-metric-icon ' + iconCls }, widgets.icon(iconName, 20)),
+		E('div', {}, [val, E('div', { 'class': 'tomfly-metric-label' }, label)])
+	]);
 }
 
 return view.extend({
@@ -192,27 +204,30 @@ return view.extend({
 		var running = !!s.running;
 		var kp = kprof.profile(s.kernel, s.version);
 		return [
-			kprof.badge(kp.kernel, s.version),
-			E('span', { 'class': 'tomfly-pill ' + (running ? 'tomfly-pill-on' : 'tomfly-pill-off') }, [
-				E('span', { 'class': 'tomfly-dot' }), running ? _('Running') : _('Stopped')
+			E('div', { 'class': 'tomfly-hero-l' }, [
+				E('div', { 'class': 'tomfly-eyebrow' }, _('Service Status')),
+				E('div', { 'class': 'tomfly-hero-row' }, [
+					E('span', { 'class': 'tomfly-pill ' + (running ? 'tomfly-pill-on' : 'tomfly-pill-off') }, [
+						E('span', { 'class': 'tomfly-dot' }), running ? _('Running') : _('Stopped')
+					]),
+					s.version ? E('span', { 'class': 'tomfly-hero-ver' }, s.version) : ''
+				])
 			]),
-			s.version ? E('span', { 'class': 'tomfly-muted' }, s.version) : '',
-			running ? E('button', {
-				'class': 'tomfly-active-node',
-				'title': _('Click to switch the active node'),
-				'click': ui.createHandlerFn(this, 'handleSwitchNode')
-			}, [
-				E('span', { 'class': 'tomfly-active-label' }, _('Active: ')),
-				E('span', { 'class': 'tomfly-active-name' }, activeNode || _('(auto)')),
-				E('span', { 'style': 'margin-left:5px;opacity:.55;font-size:12px' }, '⇄')
-			]) : '',
-			E('div', { 'class': 'tomfly-actions' }, [
+			E('div', { 'class': 'tomfly-hero-r' }, [
+				running ? E('button', {
+					'class': 'tomfly-active-node',
+					'title': _('Click to switch the active node'),
+					'click': ui.createHandlerFn(this, 'handleSwitchNode')
+				}, [
+					_('Outbound') + '：' + (activeNode || _('(auto)')),
+					widgets.icon('swap', 15)
+				]) : '',
 				E('button', {
-					'class': 'cbi-button cbi-button-save important',
+					'class': 'tomfly-btn tomfly-btn-accent',
 					'click': ui.createHandlerFn(this, 'handleAction', 'restart')
 				}, running ? _('Restart') : _('Start')),
 				running ? E('button', {
-					'class': 'cbi-button cbi-button-remove important',
+					'class': 'tomfly-btn tomfly-btn-danger',
 					'click': ui.createHandlerFn(this, 'handleAction', 'stop')
 				}, _('Stop')) : ''
 			])
@@ -229,52 +244,20 @@ return view.extend({
 		_prevDown = t.down || 0;
 		_prevTs = now;
 
-		// Push chart samples
 		_chartUp.push(upSpd); _chartDown.push(dnSpd);
 		while (_chartUp.length > _chartMax) _chartUp.shift();
 		while (_chartDown.length > _chartMax) _chartDown.shift();
 		drawChart();
 
 		return [
-			E('div', { 'class': 'tomfly-card tomfly-stat' }, [
-				E('div', { 'class': 'tomfly-stat-icon tomfly-ic-green' }, svg(ICON.up)),
-				E('div', {}, [
-					E('div', { 'class': 'tomfly-stat-value' }, fmtSpeed(upSpd)),
-					E('div', { 'class': 'tomfly-stat-label' }, _('Upload') + ' · ' + fmtBytes(t.up || 0))
-				])
-			]),
-			E('div', { 'class': 'tomfly-card tomfly-stat' }, [
-				E('div', { 'class': 'tomfly-stat-icon tomfly-ic-blue' }, svg(ICON.down)),
-				E('div', {}, [
-					E('div', { 'class': 'tomfly-stat-value' }, fmtSpeed(dnSpd)),
-					E('div', { 'class': 'tomfly-stat-label' }, _('Download') + ' · ' + fmtBytes(t.down || 0))
-				])
-			]),
-			E('div', {
-				'class': 'tomfly-card tomfly-stat tomfly-stat-clickable',
-				'title': _('Click to view connection details'),
-				'click': ui.createHandlerFn(this, 'handleShowConnections')
-			}, [
-				E('div', { 'class': 'tomfly-stat-icon tomfly-ic-amber' }, svg(ICON.link)),
-				E('div', {}, [
-					E('div', { 'class': 'tomfly-stat-value' }, String(t.conns || 0)),
-					E('div', { 'class': 'tomfly-stat-label' }, _('Connections'))
-				])
-			]),
-			E('div', { 'class': 'tomfly-card tomfly-stat' }, [
-				E('div', { 'class': 'tomfly-stat-icon tomfly-ic-indigo' }, svg(ICON.mem)),
-				E('div', {}, [
-					E('div', { 'class': 'tomfly-stat-value' }, fmtBytes(t.mem || 0)),
-					E('div', { 'class': 'tomfly-stat-label' }, _('Memory'))
-				])
-			]),
-			E('div', { 'class': 'tomfly-card tomfly-stat' }, [
-				E('div', { 'class': 'tomfly-stat-icon tomfly-ic-red' }, svg(ICON.total)),
-				E('div', {}, [
-					E('div', { 'class': 'tomfly-stat-value' }, fmtBytes((t.up || 0) + (t.down || 0))),
-					E('div', { 'class': 'tomfly-stat-label' }, _('Total Traffic'))
-				])
-			])
+			metric('up', 'tomfly-mi-green', splitSpeed(upSpd), _('Upload') + ' · ' + fmtBytes(t.up || 0)),
+			metric('down', 'tomfly-mi-accent', splitSpeed(dnSpd), _('Download') + ' · ' + fmtBytes(t.down || 0)),
+			metric('link', 'tomfly-mi-amber', String(t.conns || 0), _('Connections'), {
+				click: ui.createHandlerFn(this, 'handleShowConnections'),
+				title: _('Click to view connection details')
+			}),
+			metric('mem', 'tomfly-mi-purple', splitBytes(t.mem || 0), _('Memory')),
+			metric('clock', 'tomfly-mi-red', splitBytes((t.up || 0) + (t.down || 0)), _('Total Traffic'))
 		];
 	},
 
@@ -284,212 +267,165 @@ return view.extend({
 		var kernel = kprof.normalize(global.kernel || s.kernel, s.version);
 		var kp = kprof.profile(kernel, s.version);
 
-		var statusCard = E('div', { 'class': 'tomfly-card' }, [
-			E('div', { 'class': 'tomfly-card-title tomfly-status-title' }, [
-				E('img', {
-					'class': 'tomfly-status-logo',
-					'src': L.resource('view/tomfly/logo.png'),
-					'alt': 'TomFly'
-				}),
-				E('span', {}, _('Service Status'))
-			]),
-			E('div', { 'id': 'tomfly-status', 'class': 'tomfly-row' }, this.statusInner(s, traffic.activeNode))
-		]);
+		var hero = E('div', { 'id': 'tomfly-status', 'class': 'tomfly-card tomfly-hero' },
+			this.statusInner(s, traffic.activeNode));
 
-		var trafficGrid = E('div', { 'id': 'tomfly-traffic', 'class': 'tomfly-grid' },
+		var metrics = E('div', { 'id': 'tomfly-traffic', 'class': 'tomfly-metrics' },
 			this.trafficInner(traffic));
 
-		var trafficChart = E('canvas', {
-			'id': 'tomfly-chart',
-			'width': '720', 'height': '140',
-			'style': 'display:block;width:100%;max-width:720px;height:140px;border-radius:6px;margin:6px 0 4px'
-		});
-
-		var trafficChartWrap = E('div', { 'class': 'tomfly-chart-wrap' }, [
-			trafficChart,
-			E('div', { 'class': 'tomfly-chart-legend' }, [
-				E('span', { 'class': 'tomfly-legend-item' }, [
-					E('span', { 'class': 'tomfly-legend-swatch tomfly-legend-up' }),
-					E('span', {}, _('Upload'))
-				]),
-				E('span', { 'class': 'tomfly-legend-item' }, [
-					E('span', { 'class': 'tomfly-legend-swatch tomfly-legend-down' }),
-					E('span', {}, _('Download'))
+		var chartCard = E('div', { 'class': 'tomfly-card tomfly-chart-card tomfly-mt' }, [
+			E('div', { 'class': 'tomfly-chart-top' }, [
+				E('div', { 'class': 'tomfly-card-title' }, _('Realtime Traffic')),
+				E('div', { 'class': 'tomfly-chart-legend' }, [
+					E('span', { 'class': 'tomfly-legend-item' }, [E('span', { 'class': 'tomfly-legend-swatch tomfly-legend-up' }), _('Upload')]),
+					E('span', { 'class': 'tomfly-legend-item' }, [E('span', { 'class': 'tomfly-legend-swatch tomfly-legend-down' }), _('Download')])
 				])
-			])
+			]),
+			E('canvas', { 'id': 'tomfly-chart', 'width': '900', 'height': '210' })
 		]);
 
+		/* Access check */
 		var accessSites = [
 			{ name: 'Baidu', url: 'https://www.baidu.com' },
 			{ name: 'Google', url: 'https://www.google.com/generate_204' },
 			{ name: 'YouTube', url: 'https://www.youtube.com' }
 		];
 		var accessCard = E('div', { 'class': 'tomfly-card' }, [
-			E('div', { 'class': 'tomfly-row', 'style': 'margin-bottom:10px' }, [
-				E('span', { 'class': 'tomfly-card-title', 'style': 'margin:0' }, _('Access Check')),
+			E('div', { 'class': 'tomfly-chart-top', 'style': 'margin-bottom:2px' }, [
+				E('div', { 'class': 'tomfly-card-title' }, _('Access Check')),
 				E('button', {
-					'class': 'cbi-button cbi-button-action',
-					'style': 'padding:2px 14px;font-size:12px',
-					'id': 'tomfly-check-btn',
+					'class': 'tomfly-btn tomfly-btn-xs tomfly-btn-accent', 'id': 'tomfly-check-btn',
 					'click': ui.createHandlerFn(this, 'handleCheck')
 				}, _('Check All'))
 			]),
 			E('div', { 'id': 'tomfly-access' },
 				accessSites.map(L.bind(function (site) {
 					return E('div', { 'class': 'tomfly-access-item' }, [
-						E('span', { 'class': 'tomfly-access-dot' }),
-						E('span', { 'class': 'tomfly-access-name' }, site.name),
-						E('span', { 'class': 'tomfly-access-result', 'data-site': site.name }, '—'),
-						E('button', {
-							'class': 'cbi-button cbi-button-action',
-							'style': 'padding:1px 10px;font-size:11px;margin-left:6px',
-							'click': ui.createHandlerFn(this, 'handleCheckSite', site)
-						}, _('Check'))
+						E('span', { 'class': 'tomfly-access-name' }, [
+							E('span', { 'class': 'tomfly-access-dot' }), site.name
+						]),
+						E('div', { 'class': 'tomfly-access-r' }, [
+							E('span', { 'class': 'tomfly-access-result', 'data-site': site.name }, '—'),
+							E('button', {
+								'class': 'tomfly-btn tomfly-btn-xs tomfly-btn-ghost',
+								'click': ui.createHandlerFn(this, 'handleCheckSite', site)
+							}, _('Check'))
+						])
 					]);
 				}, this))
 			),
-			E('div', { 'class': 'tomfly-row', 'style': 'margin-top:10px' }, [
-				E('input', {
-					'class': 'cbi-input-text', 'id': 'tomfly-custom-url', 'type': 'text',
-					'style': 'flex:1;min-width:160px;font-size:12px',
-					'placeholder': 'https://example.com'
-				}),
+			E('div', { 'class': 'tomfly-access-add' }, [
+				E('input', { 'class': 'tomfly-input', 'id': 'tomfly-custom-url', 'type': 'text', 'placeholder': 'https://example.com' }),
 				E('button', {
-					'class': 'cbi-button cbi-button-action',
-					'style': 'padding:2px 12px;font-size:12px',
+					'class': 'tomfly-btn tomfly-btn-ghost', 'style': 'padding:9px 16px',
 					'click': ui.createHandlerFn(this, 'handleCheckCustom')
 				}, _('Check'))
 			])
 		]);
 
-		var modeSelect = E('select', { 'class': 'cbi-input-select', 'id': 'tomfly-mode' }, [
+		/* Quick settings */
+		var modeSelect = E('select', { 'class': 'tomfly-select', 'id': 'tomfly-mode' }, [
 			E('option', { value: 'rule' }, _('Rule')),
 			E('option', { value: 'global' }, _('Global')),
 			E('option', { value: 'direct' }, _('Direct'))
 		]);
 		modeSelect.value = global.mode || 'rule';
 
-		var dnsSelect = E('select', { 'class': 'cbi-input-select', 'id': 'tomfly-dns-mode' }, [
+		var dnsSelect = E('select', { 'class': 'tomfly-select', 'id': 'tomfly-dns-mode' }, [
 			E('option', { value: 'fake-ip' }, 'Fake-IP'),
 			E('option', { value: 'redir-host' }, 'Redir-Host')
 		]);
 		dnsSelect.value = dns.mode || 'fake-ip';
 
-		var tunCheck = null;
-		if (kp.tunConfigurable) {
-			tunCheck = E('input', { 'type': 'checkbox', 'id': 'tomfly-tun', 'style': 'margin-right:6px' });
-			tunCheck.checked = global.tun !== false;
-		}
-
-		var autostartCheck = E('input', { 'type': 'checkbox', 'id': 'tomfly-autostart', 'style': 'margin-right:6px' });
-		autostartCheck.checked = global.autostart === true;
-
-		var trafficStatsCheck = E('input', { 'type': 'checkbox', 'id': 'tomfly-traffic-stats', 'style': 'margin-right:6px' });
-		trafficStatsCheck.checked = global.traffic_stats !== false;
-
-		var settingsRows = [
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, _('Proxy Mode')),
-				E('div', { 'class': 'cbi-value-field' }, [modeSelect])
+		var settingRows = [
+			E('div', { 'class': 'tomfly-setting' }, [
+				E('div', { 'class': 'tomfly-setting-label' }, _('Proxy Mode')),
+				modeSelect
 			]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, _('DNS Mode')),
-				E('div', { 'class': 'cbi-value-field' }, [dnsSelect])
+			E('div', { 'class': 'tomfly-setting' }, [
+				E('div', { 'class': 'tomfly-setting-label' }, _('DNS Mode')),
+				dnsSelect
 			])
 		];
 
 		if (kp.tunConfigurable) {
-			settingsRows.push(E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, _('TUN Mode')),
-				E('div', { 'class': 'cbi-value-field' }, [
-					E('label', { 'style': 'display:flex;align-items:flex-start;cursor:pointer' }, [
-						tunCheck,
-						E('span', {}, _('Use TUN instead of TPROXY (kernel manages routing)'))
-					])
-				])
+			settingRows.push(E('div', { 'class': 'tomfly-setting' }, [
+				E('div', {}, [
+					E('div', { 'class': 'tomfly-setting-label' }, _('TUN Mode')),
+					E('div', { 'class': 'tomfly-setting-desc' }, _('Kernel manages routing, replacing TPROXY'))
+				]),
+				widgets.toggle('tomfly-tun', global.tun !== false)
 			]));
 		} else {
-			settingsRows.push(E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, _('Data Plane')),
-				E('div', { 'class': 'cbi-value-field' }, [
-					E('div', { 'class': 'tomfly-kernel-note' }, [
-						E('strong', {}, _('TUN only')),
-						' — ',
-						_('sing-box always captures traffic via TUN (interface TomFly). TPROXY is not available.')
-					])
-				])
+			settingRows.push(E('div', { 'class': 'tomfly-setting' }, [
+				E('div', {}, [
+					E('div', { 'class': 'tomfly-setting-label' }, _('Data Plane')),
+					E('div', { 'class': 'tomfly-setting-desc' }, _('sing-box always captures traffic via TUN — TPROXY is not available.'))
+				]),
+				E('span', { 'class': 'tomfly-kbadge' }, 'TUN')
 			]));
 		}
 
-		settingsRows.push(E('div', { 'class': 'cbi-value' }, [
-			E('label', { 'class': 'cbi-value-title' }, _('Start on Boot')),
-			E('div', { 'class': 'cbi-value-field' }, [
-				E('label', { 'style': 'display:flex;align-items:flex-start;cursor:pointer' }, [
-					autostartCheck,
-					E('span', {}, _('Auto-start the proxy when the router boots'))
-				]),
-				E('div', { 'class': 'tomfly-kernel-note' },
-					_('When off, rebooting the router will not auto-start the proxy (safer).'))
-			])
+		settingRows.push(E('div', { 'class': 'tomfly-setting' }, [
+			E('div', {}, [
+				E('div', { 'class': 'tomfly-setting-label' }, _('Start on Boot')),
+				E('div', { 'class': 'tomfly-setting-desc' }, _('Auto-start the proxy when the router boots'))
+			]),
+			widgets.toggle('tomfly-autostart', global.autostart === true)
 		]));
 
-		settingsRows.push(E('div', { 'class': 'cbi-value' }, [
-			E('label', { 'class': 'cbi-value-title' }, _('Traffic Stats')),
-			E('div', { 'class': 'cbi-value-field' }, [
-				E('label', { 'style': 'display:flex;align-items:flex-start;cursor:pointer' }, [
-					trafficStatsCheck,
-					E('span', {}, _('Track per-node monthly traffic'))
-				]),
-				E('div', { 'class': 'tomfly-kernel-note' },
-					_('Turn off to reduce overhead.'))
-			])
+		settingRows.push(E('div', { 'class': 'tomfly-setting' }, [
+			E('div', {}, [
+				E('div', { 'class': 'tomfly-setting-label' }, _('Traffic Stats')),
+				E('div', { 'class': 'tomfly-setting-desc' }, _('Track per-node monthly traffic'))
+			]),
+			widgets.toggle('tomfly-traffic-stats', global.traffic_stats !== false)
 		]));
 
 		var settingsCard = E('div', { 'class': 'tomfly-card' }, [
-			E('div', { 'class': 'tomfly-card-title' }, [
-				_('Quick Settings'),
-				' ',
+			E('div', { 'class': 'tomfly-card-head' }, [
+				E('div', { 'class': 'tomfly-card-title' }, _('Quick Settings')),
 				kprof.badge(kernel, s.version)
-			]),
-			kp.tunAlwaysOn ? E('div', { 'class': 'tomfly-kernel-banner' }, [
-				E('strong', {}, _('sing-box: ')),
-				_('No TUN toggle here — sing-box always runs in TUN mode.')
-			]) : '',
-		].concat(settingsRows).concat([
-			E('div', { 'style': 'text-align:right;margin-top:6px' }, [
+			])
+		].concat(settingRows).concat([
+			E('div', { 'class': 'tomfly-setting', 'style': 'justify-content:flex-end' }, [
 				E('button', {
-					'class': 'cbi-button cbi-button-save important',
+					'class': 'tomfly-btn tomfly-btn-primary',
 					'click': ui.createHandlerFn(this, 'handleSaveSettings')
 				}, _('Save & Restart'))
 			])
 		]));
 
-		/* Monthly per-node traffic (GB) */
-		var nodeTrafficCard = E('div', { 'class': 'tomfly-card' }, [
-			E('div', { 'class': 'tomfly-card-title' }, _('Monthly Node Traffic')),
-			E('div', { 'id': 'tomfly-node-traffic', 'class': 'tomfly-muted' },
-				E('span', {}, _('Loading...')))
+		/* Monthly per-node traffic */
+		var nodeTrafficCard = E('div', { 'class': 'tomfly-card tomfly-mt' }, [
+			E('div', { 'class': 'tomfly-card-head', 'style': 'margin-bottom:12px' }, [
+				E('div', { 'class': 'tomfly-card-title' }, _('Monthly Node Traffic'))
+			]),
+			E('div', { 'id': 'tomfly-node-traffic' }, E('span', { 'class': 'tomfly-muted' }, _('Loading...')))
 		]);
 
-		var quick = E('div', { 'class': 'tomfly-card' }, [
+		/* Quick add */
+		var quick = E('div', { 'class': 'tomfly-card tomfly-mt' }, [
 			E('div', { 'class': 'tomfly-card-title' }, _('Quick Add Node')),
-			E('div', { 'class': 'tomfly-row' }, [
+			E('div', { 'class': 'tomfly-card-desc', 'style': 'margin:4px 0 13px' },
+				_('Paste a share link — vless / vmess / trojan / ss / hy2 / tuic / anytls')),
+			E('div', { 'class': 'tomfly-access-add', 'style': 'border:none;padding:0' }, [
 				E('input', {
-					'class': 'cbi-input-text', 'id': 'tomfly-quick', 'type': 'text',
-					'style': 'flex:1;min-width:240px',
-					'placeholder': 'vless:// vmess:// trojan:// ss:// hy2:// tuic:// anytls://',
-					'keydown': L.bind(function (ev) {
-						if (ev.keyCode === 13) this.handleQuickAdd(ev);
-					}, this)
+					'class': 'tomfly-input mono', 'id': 'tomfly-quick', 'type': 'text',
+					'placeholder': 'vless://  vmess://  trojan://  ss://  hy2://  tuic://  anytls://',
+					'keydown': L.bind(function (ev) { if (ev.keyCode === 13) this.handleQuickAdd(ev); }, this)
 				}),
 				E('button', {
-					'class': 'cbi-button cbi-button-action important',
+					'class': 'tomfly-btn tomfly-btn-primary', 'style': 'padding:11px 22px',
 					'click': ui.createHandlerFn(this, 'handleQuickAdd')
 				}, _('Add'))
 			])
 		]);
 
+		if (!_pollsAdded) {
+		_pollsAdded = true;
 		poll.add(L.bind(function () {
+			if (!document.getElementById('tomfly-traffic')) return;  // tab not mounted
 			return Promise.all([
 				L.resolveDefault(api.call('get_status'), {}),
 				L.resolveDefault(api.call('get_traffic'), {})
@@ -501,8 +437,9 @@ return view.extend({
 			}, this));
 		}, this), 3);
 
-		/* Update per-node monthly traffic every 10 seconds */
 		poll.add(L.bind(function () {
+			var box = document.getElementById('tomfly-node-traffic');
+			if (!box) return;  // tab not mounted
 			return L.resolveDefault(api.call('get_node_traffic'), {}).then(L.bind(function (r) {
 				var box = document.getElementById('tomfly-node-traffic');
 				if (!box) return;
@@ -515,48 +452,41 @@ return view.extend({
 				}
 				keys.sort(function (a, b) { return (nodes[b] || 0) - (nodes[a] || 0); });
 				var maxBytes = 0;
-				keys.forEach(function (name) {
-					if ((nodes[name] || 0) > maxBytes) maxBytes = nodes[name] || 0;
-				});
+				keys.forEach(function (name) { if ((nodes[name] || 0) > maxBytes) maxBytes = nodes[name] || 0; });
 				var rows = keys.map(function (name) {
 					var bytes = nodes[name] || 0;
 					var gb = bytes / 1073741824;
 					var isZero = bytes <= 0;
-					// width relative to the busiest node this month; the max fills
-					// the track, any non-zero value keeps a 4% minimum so it stays visible
 					var width = isZero ? 0 : Math.max(4, maxBytes > 0 ? (bytes / maxBytes * 100) : 0);
 					return E('div', { 'class': 'tomfly-traffic-row' }, [
 						E('span', { 'class': 'tomfly-traffic-name' }, name),
 						E('span', { 'class': 'tomfly-traffic-bar-bg' },
-							E('span', {
-								'class': 'tomfly-traffic-bar' + (isZero ? ' zero' : ''),
-								'style': 'width:' + width + '%'
-							})),
-						E('span', { 'class': 'tomfly-traffic-gb' + (isZero ? ' zero' : '') },
-							gb.toFixed(2) + ' GB')
+							E('span', { 'class': 'tomfly-traffic-bar' + (isZero ? ' zero' : ''), 'style': 'width:' + width + '%' })),
+						E('span', { 'class': 'tomfly-traffic-gb' + (isZero ? ' zero' : '') }, gb.toFixed(2) + ' GB')
 					]);
 				});
 				var month = r.month || '';
 				dom.content(box, [
-					month ? E('div', { 'class': 'tomfly-muted', 'style': 'margin-bottom:4px;font-size:12px' },
-						month) : '',
+					month ? E('div', { 'style': 'margin-bottom:8px' }, E('span', { 'class': 'tomfly-kbadge' }, month)) : '',
 					E('div', {}, rows)
 				]);
 			}, this));
 		}, this), 10);
+		}
 
-		return E('div', { 'class': 'tomfly' }, [
-			statusCard, trafficGrid, trafficChartWrap,
-			E('div', { 'class': 'tomfly-grid-2' }, [accessCard, settingsCard]),
+		return E('div', { 'class': 'tomfly-app' }, [
+			widgets.nav('overview', [kprof.badge(kernel, s.version)]),
+			hero, metrics, chartCard,
+			E('div', { 'class': 'tomfly-grid-2 mt' }, [accessCard, settingsCard]),
 			nodeTrafficCard,
-			quick
+			quick,
+			E('div', { 'class': 'tomfly-foot' }, 'Powered by LuCI · ImmortalWrt')
 		]);
 	},
 
 	connectionsModalInner: function (conns) {
-		if (!conns.length) {
+		if (!conns.length)
 			return E('p', { 'class': 'tomfly-muted' }, _('No active connections'));
-		}
 		return E('div', { 'class': 'tomfly-conn-list' }, conns.map(function (c) {
 			var meta = c.metadata || {};
 			var host = meta.host || meta.destinationIP || '—';
@@ -582,9 +512,11 @@ return view.extend({
 		return api.call('get_connections').then(function (r) {
 			var conns = (r && r.connections) || [];
 			ui.showModal(_('Active Connections') + ' (' + conns.length + ')', [
-				self.connectionsModalInner(conns),
-				E('div', { 'class': 'right', 'style': 'margin-top:10px' }, [
-					E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Close'))
+				E('div', { 'class': 'tomfly-modal' }, [
+					self.connectionsModalInner(conns),
+					E('div', { 'class': 'tomfly-modal-actions' }, [
+						E('button', { 'class': 'tomfly-btn tomfly-btn-ghost', 'click': ui.hideModal }, _('Close'))
+					])
 				])
 			]);
 		});
@@ -600,16 +532,17 @@ return view.extend({
 				return;
 			}
 			ui.showModal(_('Switch Active Node'), [
-				E('p', { 'class': 'tomfly-muted' }, _('Choose what the PROXY group uses. "AUTO" always picks the fastest node.')),
-				E('div', { 'class': 'tomfly-node-picker' }, opts.map(function (name) {
-					return E('button', {
-						'class': 'cbi-button ' + (name === now ? 'cbi-button-positive' : 'cbi-button-neutral'),
-						'style': 'display:block;width:100%;text-align:left;margin-bottom:6px',
-						'click': ui.createHandlerFn(self, 'doSelectNode', name)
-					}, (name === now ? '✓ ' : '  ') + name);
-				})),
-				E('div', { 'class': 'right', 'style': 'margin-top:10px' }, [
-					E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Close'))
+				E('div', { 'class': 'tomfly-modal' }, [
+					E('p', { 'class': 'tomfly-muted' }, _('Choose what the PROXY group uses. "AUTO" always picks the fastest node.')),
+					E('div', { 'class': 'tomfly-node-picker' }, opts.map(function (name) {
+						return E('button', {
+							'class': 'tomfly-pick' + (name === now ? ' on' : ''),
+							'click': ui.createHandlerFn(self, 'doSelectNode', name)
+						}, (name === now ? '✓ ' : '') + name);
+					})),
+					E('div', { 'class': 'tomfly-modal-actions' }, [
+						E('button', { 'class': 'tomfly-btn tomfly-btn-ghost', 'click': ui.hideModal }, _('Close'))
+					])
 				])
 			]);
 		});
@@ -633,9 +566,7 @@ return view.extend({
 	handleAction: function (act) {
 		var self = this;
 		return api.call(act).then(function () {
-			notify(
-				E('p', act === 'stop' ? _('Service stopped') : _('Service is (re)starting…')),
-				3000);
+			notify(E('p', act === 'stop' ? _('Service stopped') : _('Service is (re)starting…')), 3000);
 			return new Promise(function (res) { window.setTimeout(res, act === 'stop' ? 1500 : 2500); });
 		}).then(function () {
 			return L.resolveDefault(api.call('get_status'), {});
@@ -649,10 +580,10 @@ return view.extend({
 		var items = document.querySelectorAll('#tomfly-access .tomfly-access-item');
 		for (var i = 0; i < items.length; i++) {
 			var nameEl = items[i].querySelector('.tomfly-access-name');
-			if (nameEl && nameEl.textContent === name) {
+			if (nameEl && nameEl.textContent.trim() === name) {
 				var dot = items[i].querySelector('.tomfly-access-dot');
 				var res = items[i].querySelector('.tomfly-access-result');
-				if (dot) { dot.className = 'tomfly-access-dot ' + (ok ? 'ok' : 'fail'); }
+				if (dot) dot.className = 'tomfly-access-dot ' + (ok ? 'ok' : 'fail');
 				if (res) {
 					res.className = 'tomfly-access-result ' + (ok ? 'ok' : 'fail');
 					res.textContent = ok ? latency + ' ms' : 'Timeout';
@@ -670,9 +601,7 @@ return view.extend({
 			var sites = (r && r.sites) || [];
 			sites.forEach(function (s) { self._updateSiteResult(s.name, s.ok, s.latency); });
 			if (btn) btn.disabled = false;
-		}).catch(function () {
-			if (btn) btn.disabled = false;
-		});
+		}).catch(function () { if (btn) btn.disabled = false; });
 	},
 
 	handleCheckSite: function (site, ev) {
@@ -682,9 +611,7 @@ return view.extend({
 		return api.call('check_site', { name: site.name, url: site.url }).then(function (r) {
 			if (r) self._updateSiteResult(r.name, r.ok, r.latency);
 			if (btn) btn.disabled = false;
-		}).catch(function () {
-			if (btn) btn.disabled = false;
-		});
+		}).catch(function () { if (btn) btn.disabled = false; });
 	},
 
 	handleCheckCustom: function () {
@@ -707,10 +634,13 @@ return view.extend({
 				existing.textContent = r.ok ? r.latency + ' ms' : 'Timeout';
 			} else {
 				el.appendChild(E('div', { 'class': 'tomfly-access-item' }, [
-					E('span', { 'class': 'tomfly-access-dot ' + (r.ok ? 'ok' : 'fail') }),
-					E('span', { 'class': 'tomfly-access-name' }, name),
-					E('span', { 'class': 'tomfly-access-result ' + (r.ok ? 'ok' : 'fail'), 'data-site': name },
-						r.ok ? r.latency + ' ms' : 'Timeout')
+					E('span', { 'class': 'tomfly-access-name' }, [
+						E('span', { 'class': 'tomfly-access-dot ' + (r.ok ? 'ok' : 'fail') }), name
+					]),
+					E('div', { 'class': 'tomfly-access-r' }, [
+						E('span', { 'class': 'tomfly-access-result ' + (r.ok ? 'ok' : 'fail'), 'data-site': name },
+							r.ok ? r.latency + ' ms' : 'Timeout')
+					])
 				]));
 			}
 		});
@@ -723,12 +653,9 @@ return view.extend({
 		var autostartEl = document.getElementById('tomfly-autostart');
 		var trafficStatsEl = document.getElementById('tomfly-traffic-stats');
 		var payload = { mode: mode, dns_mode: dnsMode };
-		if (tunEl && !tunEl.disabled)
-			payload.tun = tunEl.checked;
-		if (autostartEl)
-			payload.autostart = autostartEl.checked;
-		if (trafficStatsEl)
-			payload.traffic_stats = trafficStatsEl.checked;
+		if (tunEl && !tunEl.disabled) payload.tun = tunEl.checked;
+		if (autostartEl) payload.autostart = autostartEl.checked;
+		if (trafficStatsEl) payload.traffic_stats = trafficStatsEl.checked;
 		return api.call('set_mode', payload).then(function () {
 			return api.call('restart');
 		}).then(function () {

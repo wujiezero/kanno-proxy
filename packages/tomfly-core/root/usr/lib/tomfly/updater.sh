@@ -473,6 +473,7 @@ update_core() {
     mkdir -p /www/luci-static/resources/tomfly /www/luci-static/resources/view/tomfly
     _tf_fetch_script "${res}/tomfly/api.js" "/www/luci-static/resources/tomfly/api.js" 644 && ok=$((ok + 1)) || fail=$((fail + 1))
     _tf_fetch_script "${res}/tomfly/kernel-profile.js" "/www/luci-static/resources/tomfly/kernel-profile.js" 644 && ok=$((ok + 1)) || fail=$((fail + 1))
+    _tf_fetch_script "${res}/tomfly/widgets.js" "/www/luci-static/resources/tomfly/widgets.js" 644 && ok=$((ok + 1)) || fail=$((fail + 1))
     _tf_fetch_script "${res}/view/tomfly/style.css" "/www/luci-static/resources/view/tomfly/style.css" 644 && ok=$((ok + 1)) || fail=$((fail + 1))
     _tf_fetch_script "${res}/view/tomfly/logo.png" "/www/luci-static/resources/view/tomfly/logo.png" 644 && ok=$((ok + 1)) || fail=$((fail + 1))
     for v in overview nodes groups rules dns kernel log; do

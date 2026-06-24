@@ -1,496 +1,601 @@
 /*
- * TomFly — native LuCI styling.
- * Colours come from the active LuCI theme via CSS custom properties with
- * hex fallbacks, so the UI matches both the light and dark LuCI themes.
+ * TomFly — redesigned native LuCI UI.
+ * A self-contained design system (tokens + components) scoped to .tomfly-app.
+ * Light by default; dark follows the system via prefers-color-scheme so the
+ * panel tracks whichever theme the user's OS is set to.
  */
 
-.tomfly { animation: tomfly-fade .25s ease; }
+/* ── Design tokens ──────────────────────────────────────── */
+:root {
+	--tf-bg: #e9ecf1;
+	--tf-card: #ffffff;
+	--tf-card2: #f6f8fb;
+	--tf-border: #e5e9f0;
+	--tf-border2: #d3dae4;
+	--tf-text: #1f2937;
+	--tf-text2: #5d6b7e;
+	--tf-text3: #9aa6b6;
+	--tf-success: #0ea968;
+	--tf-success-soft: rgba(14, 169, 104, .12);
+	--tf-danger: #e23b3b;
+	--tf-danger-soft: rgba(226, 59, 59, .10);
+	--tf-warning: #c97f00;
+	--tf-warning-soft: rgba(201, 127, 0, .12);
+	--tf-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 22px rgba(16, 24, 40, .06);
+	--tf-shadow-sm: 0 1px 2px rgba(16, 24, 40, .06);
+	--tf-accent: #5b5bf0;
+	--tf-accent-strong: #4646d6;
+	--tf-accent-soft: rgba(91, 91, 240, .10);
+	--tf-accent-contrast: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--tf-bg: #0a0f1c;
+		--tf-card: #121a2b;
+		--tf-card2: #1a2336;
+		--tf-border: #243049;
+		--tf-border2: #33415c;
+		--tf-text: #e7ecf4;
+		--tf-text2: #9aa7bd;
+		--tf-text3: #65718a;
+		--tf-success: #34d399;
+		--tf-success-soft: rgba(52, 211, 153, .14);
+		--tf-danger: #f87171;
+		--tf-danger-soft: rgba(248, 113, 113, .14);
+		--tf-warning: #fbbf24;
+		--tf-warning-soft: rgba(251, 191, 36, .14);
+		--tf-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .4);
+		--tf-shadow-sm: 0 1px 2px rgba(0, 0, 0, .45);
+		--tf-accent: #7c83f7;
+		--tf-accent-strong: #9aa0ff;
+		--tf-accent-soft: rgba(124, 131, 247, .16);
+		--tf-accent-contrast: #0a0f1c;
+	}
+}
+
+/* Hide LuCI's stock node tab strip on our pages — we render our own pill nav.
+   widgets.mount() also hides it via JS as a belt-and-suspenders fallback. */
+body.tomfly-page #maincontent ul.tabs,
+body.tomfly-page #maincontent ul.cbi-tabmenu,
+body.tomfly-page #maincontent .cbi-tabmenu { display: none !important; }
+
+/* ── App shell ──────────────────────────────────────────── */
+.tomfly-app {
+	font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+	color: var(--tf-text);
+	background: var(--tf-bg);
+	border-radius: 16px;
+	padding: 22px 24px 30px;
+	margin: -6px 0 0;
+	animation: tomfly-fade .25s ease;
+	-webkit-font-smoothing: antialiased;
+}
+.tomfly-app * { box-sizing: border-box; }
 @keyframes tomfly-fade {
 	from { opacity: 0; transform: translateY(6px); }
 	to   { opacity: 1; transform: none; }
 }
+.tomfly-app a { text-decoration: none; }
+.tomfly-i { display: inline-flex; align-items: center; }
+.tomfly-i svg { display: block; }
+.tomfly-mt { margin-top: 14px; }
 
-/* ── Overview status logo ───────────────────────────────── */
-.tomfly-status-title {
-	display: flex;
-	align-items: center;
-	gap: 8px;
+/* ── Pill navigation ────────────────────────────────────── */
+.tomfly-nav {
+	display: flex; align-items: center; justify-content: space-between;
+	gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
 }
-.tomfly-status-logo {
-	width: 26px;
-	height: 26px;
-	max-width: 26px;
-	max-height: 26px;
-	object-fit: contain;
-	flex: 0 0 auto;
+.tomfly-navpills {
+	display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+	padding: 5px; background: var(--tf-card);
+	border: 1px solid var(--tf-border); border-radius: 13px;
+	box-shadow: var(--tf-shadow-sm);
+}
+.tomfly-navpill {
+	padding: 8px 15px; border-radius: 9px;
+	font-size: 13.5px; font-weight: 500; color: var(--tf-text2);
+	white-space: nowrap; cursor: pointer; transition: all .15s;
+}
+.tomfly-navpill:hover { background: var(--tf-card2); color: var(--tf-text); }
+.tomfly-navpill.active {
+	background: var(--tf-accent); color: var(--tf-accent-contrast); font-weight: 650;
+}
+.tomfly-navpill.active:hover { background: var(--tf-accent-strong); color: var(--tf-accent-contrast); }
+.tomfly-nav-right { display: flex; align-items: center; gap: 12px; }
+/* logo.png has a white background, so frame it as a rounded tile that reads
+   as an intentional badge on both light and dark themes */
+.tomfly-nav-logo {
+	height: 38px; width: auto; max-width: 130px; object-fit: contain; display: block;
+	background: #fff; border: 1px solid var(--tf-border); border-radius: 9px;
+	box-shadow: var(--tf-shadow-sm);
 }
 
-/* ── Layout ─────────────────────────────────────────────── */
-.tomfly-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-	gap: 12px;
-	margin-bottom: 14px;
+/* ── Buttons ────────────────────────────────────────────── */
+.tomfly-btn {
+	display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+	padding: 9px 16px; border-radius: 10px;
+	font-size: 13.5px; font-weight: 650; line-height: 1;
+	border: 1px solid transparent; cursor: pointer;
+	font-family: inherit; transition: background .15s, color .15s, border-color .15s, filter .15s;
+	white-space: nowrap;
 }
-.tomfly-grid-2 {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-	gap: 12px;
-	margin-bottom: 14px;
+.tomfly-btn:disabled { opacity: .6; cursor: default; }
+.tomfly-btn .tomfly-i svg { width: 15px; height: 15px; }
+.tomfly-btn-primary { background: var(--tf-accent); color: var(--tf-accent-contrast); }
+.tomfly-btn-primary:hover:not(:disabled) { background: var(--tf-accent-strong); color: var(--tf-accent-contrast); }
+.tomfly-btn-ghost { background: var(--tf-card); border-color: var(--tf-border2); color: var(--tf-text2); }
+.tomfly-btn-ghost:hover:not(:disabled) { background: var(--tf-card2); color: var(--tf-accent); }
+.tomfly-btn-accent { background: var(--tf-card); border-color: var(--tf-border2); color: var(--tf-accent); }
+.tomfly-btn-accent:hover:not(:disabled) { background: var(--tf-accent-soft); }
+.tomfly-btn-danger { background: var(--tf-card); border-color: var(--tf-border2); color: var(--tf-danger); }
+.tomfly-btn-danger:hover:not(:disabled) { background: var(--tf-danger-soft); }
+.tomfly-btn-soft { background: var(--tf-accent-soft); color: var(--tf-accent); }
+.tomfly-btn-soft:hover:not(:disabled) { filter: brightness(1.04); }
+.tomfly-btn-sm { padding: 7px 14px; font-size: 12.5px; border-radius: 9px; }
+.tomfly-btn-xs { padding: 6px 12px; font-size: 12px; border-radius: 8px; font-weight: 600; }
+.tomfly-iconbtn {
+	width: 36px; height: 34px; padding: 0; border-radius: 9px;
+	display: inline-flex; align-items: center; justify-content: center;
+	background: var(--tf-card); border: 1px solid var(--tf-border2);
+	color: var(--tf-text2); cursor: pointer; transition: background .15s, color .15s;
 }
-.tomfly-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	flex-wrap: wrap;
-}
-.tomfly-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tomfly-iconbtn:hover { background: var(--tf-card2); }
+.tomfly-iconbtn.danger:hover { background: var(--tf-danger-soft); color: var(--tf-danger); }
+.tomfly-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tomfly-actions-end { display: flex; justify-content: flex-end; margin-top: 16px; }
 
 /* ── Cards ──────────────────────────────────────────────── */
 .tomfly-card {
-	background: var(--background-color-high, #fff);
-	border: 1px solid var(--border-color-medium, #e5e7eb);
-	border-radius: 10px;
-	padding: 16px 18px;
-	margin-bottom: 14px;
-	transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+	background: var(--tf-card); border: 1px solid var(--tf-border);
+	border-radius: 16px; box-shadow: var(--tf-shadow-sm); padding: 20px 22px;
 }
-.tomfly-card:hover { box-shadow: 0 4px 18px rgba(0, 0, 0, .07); }
-.tomfly-card-title {
-	font-size: 11.5px;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: .7px;
-	color: var(--text-color-low, #8a8a8a);
-	margin-bottom: 13px;
+.tomfly-card-head {
+	display: flex; align-items: center; gap: 9px; margin-bottom: 4px;
 }
-
-/* ── Stat cards ─────────────────────────────────────────── */
-.tomfly-stat { display: flex; align-items: center; gap: 14px; }
-.tomfly-stat:hover { transform: translateY(-2px); }
-.tomfly-stat-icon {
-	width: 44px; height: 44px;
-	border-radius: 11px;
-	display: flex; align-items: center; justify-content: center;
-	flex-shrink: 0;
-	transition: transform .18s ease;
+.tomfly-card-title { font-size: 14.5px; font-weight: 650; color: var(--tf-text); }
+.tomfly-eyebrow {
+	font-size: 11px; font-weight: 700; letter-spacing: .1em;
+	color: var(--tf-text3); text-transform: uppercase;
 }
-.tomfly-stat:hover .tomfly-stat-icon { transform: scale(1.07); }
-.tomfly-stat-clickable { cursor: pointer; }
-.tomfly-stat-clickable:hover { border-color: rgba(211, 158, 0, .45); }
-.tomfly-stat-icon svg { width: 22px; height: 22px; }
-.tomfly-stat-value { font-size: 19px; font-weight: 700; line-height: 1.15; word-break: break-all; }
-.tomfly-stat-label { font-size: 12px; color: var(--text-color-low, #8a8a8a); margin-top: 2px; }
+.tomfly-card-desc { font-size: 12.5px; color: var(--tf-text3); margin-top: 2px; }
+.tomfly-kbadge {
+	display: inline-flex; align-items: center; gap: 6px;
+	padding: 2px 9px; background: var(--tf-accent-soft); color: var(--tf-accent);
+	border-radius: 7px; font-size: 11px; font-weight: 700;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.tomfly-h1 { font-size: 21px; font-weight: 750; letter-spacing: -.01em; margin: 0; }
+.tomfly-page-head {
+	display: flex; align-items: center; justify-content: space-between;
+	gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.tomfly-page-head-l { display: flex; align-items: center; gap: 11px; }
+.tomfly-muted { color: var(--tf-text3); font-size: 13px; }
+.tomfly-count { font-size: 13px; color: var(--tf-text3); }
 
-.tomfly-ic-green  { background: rgba(0, 172, 89, .12);  color: #00ac59; }
-.tomfly-ic-blue   { background: rgba(25, 118, 210, .12); color: #1976d2; }
-.tomfly-ic-amber  { background: rgba(239, 189, 11, .16); color: #d39e00; }
-.tomfly-ic-red    { background: rgba(246, 43, 18, .1);   color: #f62b12; }
-.tomfly-ic-indigo { background: rgba(99, 102, 241, .13); color: #6366f1; }
+/* ── Banners ────────────────────────────────────────────── */
+.tomfly-banner {
+	display: flex; align-items: flex-start; gap: 11px;
+	padding: 14px 18px; border: 1px solid var(--tf-border);
+	border-radius: 12px; margin-bottom: 20px;
+}
+.tomfly-banner.info { background: var(--tf-accent-soft); border-left: 3px solid var(--tf-accent); }
+.tomfly-banner.warn { background: var(--tf-warning-soft); border-left: 3px solid var(--tf-warning); }
+.tomfly-banner .tomfly-i { flex: 0 0 auto; margin-top: 1px; }
+.tomfly-banner.info .tomfly-i { color: var(--tf-accent); }
+.tomfly-banner.warn .tomfly-i { color: var(--tf-warning); }
+.tomfly-banner-text { font-size: 13px; line-height: 1.6; color: var(--tf-text2); }
+.tomfly-banner-text strong { color: var(--tf-text); }
 
-/* ── Status pill ────────────────────────────────────────── */
+/* ── Status pill (running / stopped) ────────────────────── */
 .tomfly-pill {
-	display: inline-flex; align-items: center; gap: 7px;
-	padding: 5px 13px;
-	border-radius: 20px;
-	font-size: 13px; font-weight: 600;
+	display: inline-flex; align-items: center; gap: 8px;
+	padding: 5px 13px 5px 11px; border-radius: 999px;
+	font-size: 13.5px; font-weight: 700;
 }
-.tomfly-pill-on  { background: rgba(0, 172, 89, .12); color: #00ac59; }
-.tomfly-pill-off { background: rgba(246, 43, 18, .1); color: #f62b12; }
-.tomfly-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.tomfly-active-node {
-	display: inline-flex; align-items: center; gap: 4px;
-	padding: 4px 12px; border-radius: 6px;
-	background: rgba(99, 102, 241, .1); font-size: 13px;
-	border: 1px solid transparent; cursor: pointer;
-	font-family: inherit; transition: background .15s ease, border-color .15s ease;
-}
-.tomfly-active-node:hover { background: rgba(99, 102, 241, .18); border-color: rgba(99, 102, 241, .4); }
-.tomfly-node-picker { max-height: 320px; overflow-y: auto; margin: 4px 0 10px; }
-.tomfly-active-label { color: var(--text-color-low, #8a8a8a); font-weight: 500; }
-.tomfly-active-name { color: #6366f1; font-weight: 600; }
-.tomfly-pill-on .tomfly-dot { animation: tomfly-pulse 2s infinite; }
+.tomfly-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.tomfly-pill-on { background: var(--tf-success-soft); color: var(--tf-success); }
+.tomfly-pill-on .tomfly-dot { animation: tomfly-pulse 1.8s ease-in-out infinite; }
+.tomfly-pill-off { background: var(--tf-danger-soft); color: var(--tf-danger); }
 @keyframes tomfly-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-.tomfly-pill-mh { background: rgba(59, 130, 246, .12); color: #2563eb; }
-.tomfly-pill-sb { background: rgba(239, 68, 68, .12); color: #dc2626; }
-.tomfly-kernel-pill { font-size: 12px; font-weight: 600; padding: 3px 10px; }
+/* kernel badge (from kernel-profile.js) */
+.tomfly-kernel-pill {
+	font-size: 12px; font-weight: 700; padding: 3px 11px; border-radius: 8px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	background: var(--tf-accent-soft); color: var(--tf-accent);
+}
+.tomfly-pill-mh { background: var(--tf-accent-soft); color: var(--tf-accent); }
+.tomfly-pill-sb { background: rgba(239, 68, 68, .13); color: #ef4444; }
 
-.tomfly-kernel-banner {
-	padding: 10px 14px; margin-bottom: 14px;
-	border-radius: 8px; font-size: 13px; line-height: 1.45;
-	background: rgba(99, 102, 241, .08);
-	border: 1px solid rgba(99, 102, 241, .18);
-	color: var(--text-color-medium, #444);
+/* ── Hero (service status) ──────────────────────────────── */
+.tomfly-hero {
+	display: flex; align-items: center; justify-content: space-between;
+	gap: 20px; flex-wrap: wrap; padding: 20px 24px; box-shadow: var(--tf-shadow);
 }
-.tomfly-kernel-banner.warn {
-	background: rgba(245, 158, 11, .08);
-	border-color: rgba(245, 158, 11, .25);
+.tomfly-hero-l { min-width: 0; }
+.tomfly-hero-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 11px; }
+.tomfly-hero-ver { font-size: 13.5px; color: var(--tf-text2); font-variant-numeric: tabular-nums; }
+.tomfly-hero-r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tomfly-active-node {
+	display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px;
+	background: var(--tf-accent-soft); color: var(--tf-accent);
+	border: none; border-radius: 11px; font-size: 13px; font-weight: 700;
+	font-family: inherit; cursor: pointer; transition: filter .15s;
 }
-.tomfly-kernel-note {
-	font-size: 12px; color: var(--text-color-low, #8a8a8a);
-	margin-top: 6px; line-height: 1.45;
-}
-.tomfly-field-disabled { opacity: .62; }
-.tomfly-field-disabled input[type="checkbox"] { cursor: not-allowed; }
+.tomfly-active-node:hover { filter: brightness(1.04); }
 
-/* ── Segmented switch (kernel/mode selectors) ───────────── */
+/* ── Metric cards ───────────────────────────────────────── */
+.tomfly-metrics {
+	display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 14px;
+}
+.tomfly-metric {
+	display: flex; align-items: center; gap: 14px;
+	background: var(--tf-card); border: 1px solid var(--tf-border);
+	border-radius: 15px; box-shadow: var(--tf-shadow-sm); padding: 16px 18px;
+	transition: transform .18s ease, box-shadow .18s ease;
+}
+.tomfly-metric.clickable { cursor: pointer; }
+.tomfly-metric.clickable:hover { transform: translateY(-2px); box-shadow: var(--tf-shadow); }
+.tomfly-metric-icon {
+	width: 42px; height: 42px; border-radius: 12px; flex: 0 0 auto;
+	display: flex; align-items: center; justify-content: center;
+}
+.tomfly-metric-icon svg { width: 20px; height: 20px; }
+.tomfly-metric-val {
+	font-size: 22px; font-weight: 700; line-height: 1.05;
+	font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+}
+.tomfly-metric-unit { font-size: 13px; font-weight: 600; color: var(--tf-text2); }
+.tomfly-metric-label { font-size: 12px; color: var(--tf-text2); margin-top: 3px; }
+.tomfly-mi-green  { color: #10b981; background: rgba(16, 185, 129, .14); }
+.tomfly-mi-accent { color: var(--tf-accent); background: var(--tf-accent-soft); }
+.tomfly-mi-amber  { color: #d68a00; background: rgba(214, 138, 0, .15); }
+.tomfly-mi-purple { color: #a855f7; background: rgba(168, 85, 247, .14); }
+.tomfly-mi-red    { color: #f43f5e; background: rgba(244, 63, 94, .13); }
+
+/* ── Traffic chart ──────────────────────────────────────── */
+.tomfly-chart-card { padding: 18px 22px 14px; }
+.tomfly-chart-top {
+	display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;
+}
+.tomfly-chart-legend { display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: var(--tf-text2); }
+.tomfly-legend-item { display: flex; align-items: center; gap: 6px; }
+.tomfly-legend-swatch { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.tomfly-legend-up { background: #10b981; }
+.tomfly-legend-down { background: var(--tf-accent); }
+#tomfly-chart { display: block; width: 100%; height: 210px; }
+
+/* ── Two-column grid ────────────────────────────────────── */
+.tomfly-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.tomfly-grid-2.mt { margin-top: 14px; }
+
+/* ── Access check ───────────────────────────────────────── */
+.tomfly-access-item {
+	display: flex; align-items: center; justify-content: space-between;
+	gap: 12px; padding: 13px 0; border-top: 1px solid var(--tf-border);
+}
+.tomfly-access-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+.tomfly-access-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tf-text3); flex: 0 0 auto; }
+.tomfly-access-dot.ok { background: var(--tf-success); }
+.tomfly-access-dot.fail { background: var(--tf-danger); }
+.tomfly-access-r { display: flex; align-items: center; gap: 12px; }
+.tomfly-access-result { font-size: 13px; color: var(--tf-text3); font-variant-numeric: tabular-nums; }
+.tomfly-access-result.ok { color: var(--tf-success); font-weight: 600; }
+.tomfly-access-result.fail { color: var(--tf-danger); font-weight: 600; }
+.tomfly-access-add { display: flex; gap: 10px; padding-top: 14px; border-top: 1px solid var(--tf-border); }
+
+/* ── Form controls ──────────────────────────────────────── */
+.tomfly-input, .tomfly-select, .tomfly-textarea {
+	padding: 9px 13px; border: 1px solid var(--tf-border2); border-radius: 10px;
+	background: var(--tf-card); color: var(--tf-text);
+	font-size: 13.5px; font-family: inherit; outline: none; width: 100%;
+	/* height:auto + line-height override LuCI's fixed select/input height
+	   (else padding + line-height overflow the box and clip the text) */
+	height: auto; line-height: 1.4; box-sizing: border-box;
+}
+.tomfly-textarea {
+	min-height: 120px; line-height: 1.7; resize: vertical;
+	background: var(--tf-card2);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+}
+.tomfly-input:focus, .tomfly-select:focus, .tomfly-textarea:focus { border-color: var(--tf-accent); }
+.tomfly-input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.tomfly-select {
+	-webkit-appearance: none; appearance: none; cursor: pointer;
+	padding-right: 32px;
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239aa6b6' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+	background-repeat: no-repeat; background-position: right 11px center;
+}
+.tomfly-flabel { font-size: 12.5px; font-weight: 600; color: var(--tf-text2); margin-bottom: 7px; }
+.tomfly-fhint { font-size: 12px; color: var(--tf-text3); margin-top: 7px; }
+
+/* setting rows (label/desc left, control right) */
+.tomfly-setting {
+	display: flex; align-items: center; justify-content: space-between;
+	gap: 16px; padding: 13px 0; border-top: 1px solid var(--tf-border);
+}
+.tomfly-setting:first-of-type { border-top: none; }
+.tomfly-setting-label { font-size: 13.5px; font-weight: 600; }
+.tomfly-setting-desc { font-size: 12px; color: var(--tf-text3); margin-top: 2px; }
+.tomfly-setting .tomfly-select { min-width: 160px; width: auto; }
+/* label-aligned form rows (kernel/global) */
+.tomfly-frow { display: flex; align-items: center; gap: 18px; padding: 10px 0; border-top: 1px solid var(--tf-border); }
+.tomfly-frow:first-of-type { border-top: none; }
+.tomfly-frow-label { width: 120px; flex: 0 0 auto; font-size: 13.5px; font-weight: 600; color: var(--tf-text2); }
+.tomfly-frow .tomfly-select, .tomfly-frow .tomfly-input { flex: 1; }
+.tomfly-frow-note { font-size: 12px; color: var(--tf-text3); margin: 8px 0 0 138px; line-height: 1.5; }
+
+/* ── Toggle switch ──────────────────────────────────────── */
+.tomfly-switch-wrap { flex: 0 0 auto; }
+/* !important: LuCI base CSS styles input[type=checkbox] (higher specificity) */
+.tomfly-switch-input { display: none !important; }
 .tomfly-switch {
-	display: inline-flex;
-	border: 1px solid var(--border-color-medium, #e5e7eb);
-	border-radius: 8px;
-	overflow: hidden;
+	display: inline-block; position: relative; width: 40px; height: 23px;
+	border-radius: 999px; background: var(--tf-border2); cursor: pointer;
+	transition: background .18s; vertical-align: middle;
 }
-.tomfly-switch button {
-	border: none; background: transparent;
-	padding: 7px 17px;
-	font-size: 13px; cursor: pointer;
-	color: var(--text-color-medium, #555);
-	transition: background .15s ease, color .15s ease;
+.tomfly-switch.on { background: var(--tf-accent); }
+.tomfly-switch-knob {
+	position: absolute; top: 2px; left: 2px; width: 19px; height: 19px;
+	border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+	transition: left .18s;
 }
-.tomfly-switch button + button { border-left: 1px solid var(--border-color-medium, #e5e7eb); }
-.tomfly-switch button:hover:not(.active) { background: rgba(25, 118, 210, .07); }
-.tomfly-switch button.active { background: var(--primary-color-high, #1976d2); color: #fff; }
+.tomfly-switch.on .tomfly-switch-knob { left: 19px; }
 
-/* ── Node cards (compact single-row) ────────────────────── */
-.tomfly-node {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 7px 12px;
-	background: var(--background-color-high, #fff);
-	border: 1px solid var(--border-color-medium, #e5e7eb);
-	border-radius: 8px;
-	padding: 7px 12px;
-	margin-bottom: 6px;
-	transition: border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
-	animation: tomfly-fade .2s ease;
-}
-.tomfly-node:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, .06); }
-.tomfly-node.off { opacity: .55; }
-.tomfly-node-head {
-	display: flex; align-items: center; gap: 10px;
-	flex: 1 1 260px; min-width: 0;
-}
-.tomfly-node-name {
-	font-weight: 600; flex: 0 1 auto;
-	min-width: 0; max-width: 340px;
+/* ── Monthly node traffic ───────────────────────────────── */
+.tomfly-traffic-row { display: flex; align-items: center; gap: 16px; padding: 9px 0; }
+.tomfly-traffic-name {
+	width: 200px; flex: 0 0 auto; font-size: 13px; font-weight: 550;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--tf-text2);
 	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tomfly-addr {
-	font-family: var(--font-mono, monospace);
-	font-size: 12px; color: var(--text-color-low, #8a8a8a);
-	white-space: nowrap;
-}
-.tomfly-meta { display: flex; gap: 6px; flex-shrink: 0; }
-.tomfly-meta span {
-	font-size: 11px; color: var(--text-color-low, #8a8a8a);
-	background: var(--background-color-low, #f3f4f6);
-	border: 1px solid var(--border-color-low, #eee);
-	padding: 1px 6px; border-radius: 4px;
-}
-.tomfly-node .tomfly-actions { gap: 6px; flex-shrink: 0; }
-.tomfly-node .cbi-button { padding: 4px 11px; font-size: 12.5px; }
-
-/* badges */
-.tomfly-badge {
-	font-size: 10px; font-weight: 700;
-	padding: 2px 7px; border-radius: 4px;
-	text-transform: uppercase; letter-spacing: .4px;
-	background: rgba(25, 118, 210, .1); color: #1976d2;
-}
-.tomfly-badge.vmess  { background: rgba(25, 118, 210, .1);  color: #1976d2; }
-.tomfly-badge.vless  { background: rgba(99, 102, 241, .12); color: #6366f1; }
-.tomfly-badge.trojan { background: rgba(239, 189, 11, .15); color: #b8860b; }
-.tomfly-badge.ss     { background: rgba(0, 172, 89, .12);   color: #00ac59; }
-.tomfly-badge.hy2, .tomfly-badge.hysteria2 { background: rgba(246, 43, 18, .1); color: #f62b12; }
-.tomfly-badge.tuic   { background: rgba(139, 92, 246, .14); color: #8b5cf6; }
-.tomfly-badge.naive  { background: rgba(20, 184, 166, .14); color: #14b8a6; }
-.tomfly-badge.anytls { background: rgba(236, 72, 153, .12); color: #ec4899; }
-
-.tomfly-lat { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
-.tomfly-lat-good { background: rgba(0, 172, 89, .12); color: #00ac59; }
-.tomfly-lat-ok   { background: rgba(239, 189, 11, .15); color: #b8860b; }
-.tomfly-lat-bad  { background: rgba(246, 43, 18, .1);  color: #f62b12; }
-.tomfly-lat-none { color: var(--text-color-low, #aaa); }
-
-/* incompatible-node warning banner — wraps to its own full-width line */
-.tomfly-node-warn {
-	flex-basis: 100%;
-	display: flex; align-items: center; gap: 6px;
-	font-size: 11.5px; font-weight: 500;
-	color: #b8860b;
-	background: rgba(239, 189, 11, .12);
-	border: 1px solid rgba(239, 189, 11, .25);
-	border-radius: 5px; padding: 4px 9px; margin: 0;
-}
-
-/* ── Kernel cards ───────────────────────────────────────── */
-.tomfly-kernel-section-head {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin: 18px 0 8px;
-	min-width: 0;
-}
-.tomfly-kernel-section-head .tomfly-kernel-section-label {
-	margin-bottom: 0;
-	flex-shrink: 0;
-}
-.tomfly-section-hint {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 12px;
-	font-weight: 400;
-	letter-spacing: normal;
-	text-transform: none;
-	color: var(--text-color-low, #8a8a8a);
-	cursor: help;
-}
-.tomfly-grid-4 {
-	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
-	gap: 12px;
-	margin-bottom: 14px;
-}
-.tomfly-grid-4 > .tomfly-card {
-	margin-bottom: 0;
-	min-width: 0;
-}
-.tomfly-core-bar { margin-bottom: 14px; }
-.tomfly-core-bar-row { align-items: center; }
-.tomfly-core-bar-main {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	flex: 1;
-	min-width: 0;
-}
-.tomfly-core-badge {
-	width: 40px;
-	height: 40px;
-	font-size: 18px;
-	margin-bottom: 0;
-	flex-shrink: 0;
-}
-.tomfly-core-bar-title {
-	font-weight: 700;
-	font-size: 15px;
-	line-height: 1.2;
-}
-.tomfly-core-bar-desc {
-	font-size: 12px;
-	margin-top: 2px;
-}
-.tomfly-kernel { text-align: center; }
-.tomfly-kernel-badge {
-	width: 52px; height: 52px; border-radius: 14px;
-	display: inline-flex; align-items: center; justify-content: center;
-	font-weight: 800; font-size: 22px; margin-bottom: 8px;
-	transition: transform .18s ease;
-}
-.tomfly-kernel:hover .tomfly-kernel-badge { transform: scale(1.08); }
-.tomfly-kernel-name { font-weight: 700; font-size: 15px; }
-.tomfly-kernel-sub { font-size: 12px; margin: 2px 0 8px; }
-.tomfly-geo-files {
-	margin: 0 0 10px; padding: 8px 10px 8px 22px;
-	font-size: 12px; line-height: 1.5;
-	background: rgba(0, 0, 0, .03); border-radius: 6px;
-	list-style: disc;
-}
-.tomfly-geo-files code {
-	font-family: var(--font-mono, monospace);
-	font-size: 11px;
-}
-.tomfly-geo-card .tomfly-kernel-ver { margin-bottom: 6px; }
-.tomfly-kernel-ver { font-size: 12px; color: var(--text-color-low, #8a8a8a); font-family: var(--font-mono, monospace); margin: 2px 0 8px; }
-
-/* ── Helpers ────────────────────────────────────────────── */
-.tomfly-input { width: 100%; }
-.tomfly-muted { color: var(--text-color-low, #8a8a8a); font-size: 13px; }
-.tomfly-empty { text-align: center; padding: 30px; color: var(--text-color-low, #999); }
-.tomfly-field { margin-bottom: 14px; }
-.tomfly-field > label { display: block; font-size: 12px; font-weight: 500; color: var(--text-color-medium, #555); margin-bottom: 6px; }
-.tomfly-tips { list-style: none; padding: 0; margin: 0; }
-.tomfly-tips li {
-	font-size: 12.5px; color: var(--text-color-medium, #555);
-	padding: 5px 0 5px 15px; position: relative;
-	border-bottom: 1px solid var(--border-color-low, #f0f0f0);
-}
-.tomfly-tips li:last-child { border-bottom: none; }
-.tomfly-tips li::before { content: '›'; position: absolute; left: 0; color: var(--primary-color-high, #1976d2); font-weight: 700; }
-
-/* ── Log viewer ─────────────────────────────────────────── */
-.tomfly-log {
-	font-family: var(--font-mono, monospace);
-	font-size: 12px; line-height: 1.65;
-	white-space: pre-wrap; word-break: break-all;
-	max-height: 560px; overflow: auto;
-	background: var(--background-color-low, #f7f7f8);
-	border: 1px solid var(--border-color-low, #eee);
-	border-radius: 8px; padding: 14px;
-}
-
-/* tags (group proxies) */
-.tomfly-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.tomfly-tag {
-	display: inline-flex; align-items: center; gap: 5px;
-	background: rgba(25, 118, 210, .1); color: #1976d2;
-	border: 1px solid rgba(25, 118, 210, .2);
-	border-radius: 5px; padding: 3px 8px; font-size: 12px;
-}
-.tomfly-tag button { background: none; border: none; cursor: pointer; color: inherit; opacity: .65; padding: 0; line-height: 1; }
-.tomfly-tag button:hover { opacity: 1; }
-
-/* ── Access check ──────────────────────────────────────── */
-.tomfly-access-item {
-	display: flex; align-items: center; gap: 10px;
-	padding: 9px 0;
-	border-bottom: 1px solid var(--border-color-low, #f0f0f0);
-}
-.tomfly-access-item:last-child { border-bottom: none; }
-.tomfly-access-dot {
-	width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-}
-.tomfly-access-dot.ok { background: #00ac59; }
-.tomfly-access-dot.fail { background: #f62b12; }
-.tomfly-access-name { flex: 1; font-size: 13px; font-weight: 500; }
-.tomfly-access-result {
-	font-size: 12px; font-weight: 600;
-	font-family: var(--font-mono, monospace);
-}
-.tomfly-access-result.ok { color: #00ac59; }
-.tomfly-access-result.fail { color: #f62b12; }
-
-/* ── Connection list modal ─────────────────────────────── */
-.tomfly-conn-list {
-	max-height: 420px;
-	overflow-y: auto;
-	margin: 4px 0 10px;
-}
-.tomfly-conn-item {
-	padding: 10px 0;
-	border-bottom: 1px solid var(--border-color-low, #f0f0f0);
-}
-.tomfly-conn-item:last-child { border-bottom: none; }
-.tomfly-conn-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-}
-.tomfly-conn-host {
-	font-weight: 600;
-	font-size: 13px;
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.tomfly-conn-traffic {
-	font-size: 11px;
-	font-family: var(--font-mono, monospace);
-	color: var(--text-color-low, #8a8a8a);
-	white-space: nowrap;
-	flex-shrink: 0;
-}
-.tomfly-conn-meta {
-	font-size: 11.5px;
-	color: var(--text-color-low, #8a8a8a);
-	margin-top: 3px;
-}
-.tomfly-conn-src {
-	font-size: 11px;
-	font-family: var(--font-mono, monospace);
-	color: var(--text-color-low, #aaa);
-	margin-top: 2px;
-}
-
-/* ── Monthly node traffic bars ──────────────────────────── */
-.tomfly-traffic-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 5px 0;
-}
-.tomfly-traffic-name {
-	width: 120px;
-	flex-shrink: 0;
-	font-size: 12.5px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.tomfly-traffic-bar-bg {
-	flex: 1;
-	height: 10px;
-	background: var(--background-color-low, rgba(0, 0, 0, .06));
-	border-radius: 6px;
-	overflow: hidden;
-	min-width: 40px;
-}
-.tomfly-traffic-bar {
-	display: block;
-	height: 100%;
-	background: linear-gradient(90deg, #3fb950, #58a6ff);
-	border-radius: 6px;
-	transition: width .6s ease;
-}
+.tomfly-traffic-bar-bg { flex: 1; height: 8px; background: var(--tf-card2); border-radius: 999px; overflow: hidden; }
+.tomfly-traffic-bar { display: block; height: 100%; background: var(--tf-accent); border-radius: 999px; transition: width .6s ease; }
 .tomfly-traffic-bar.zero { background: transparent; }
 .tomfly-traffic-gb {
-	width: 74px;
-	flex-shrink: 0;
-	text-align: right;
-	font-size: 12.5px;
-	font-weight: 600;
-	font-variant-numeric: tabular-nums;
-	color: var(--text-color-medium, #555);
+	width: 78px; flex: 0 0 auto; text-align: right;
+	font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums;
 }
-.tomfly-traffic-gb.zero {
-	color: var(--text-color-low, #9aa0a6);
-	font-weight: 500;
+.tomfly-traffic-gb.zero { color: var(--tf-text3); font-weight: 500; }
+
+/* ── Node rows ──────────────────────────────────────────── */
+.tomfly-nodes { display: flex; flex-direction: column; gap: 11px; }
+.tomfly-node {
+	position: relative; display: flex; flex-direction: column; gap: 12px;
+	padding: 15px 16px; background: var(--tf-card);
+	border: 1px solid var(--tf-border); border-radius: 13px;
+	box-shadow: var(--tf-shadow-sm); transition: border-color .15s, box-shadow .15s;
+	animation: tomfly-fade .2s ease;
+}
+.tomfly-node.active { border-color: var(--tf-accent); box-shadow: 0 0 0 1px var(--tf-accent), var(--tf-shadow-sm); }
+.tomfly-node.off { opacity: .58; }
+.tomfly-node-main { display: flex; align-items: center; gap: 14px; }
+.tomfly-reorder { display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; }
+.tomfly-reorder button {
+	width: 22px; height: 16px; padding: 0; line-height: 1;
+	display: flex; align-items: center; justify-content: center;
+	border: 1px solid var(--tf-border2); border-radius: 5px;
+	background: var(--tf-card); color: var(--tf-text3); cursor: pointer;
+	font-size: 9px; transition: background .15s, color .15s;
+}
+.tomfly-reorder button:hover { background: var(--tf-card2); color: var(--tf-accent); }
+.tomfly-node-body { min-width: 0; flex: 1; }
+.tomfly-node-name-row { display: flex; align-items: center; gap: 9px; }
+.tomfly-node-name {
+	font-size: 15px; font-weight: 650; overflow: hidden;
+	text-overflow: ellipsis; white-space: nowrap;
+}
+.tomfly-tag-on {
+	padding: 2px 8px; background: var(--tf-accent-soft); color: var(--tf-accent);
+	border-radius: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; flex: 0 0 auto;
+}
+.tomfly-tag-off {
+	padding: 2px 8px; background: var(--tf-card2); color: var(--tf-text3);
+	border: 1px solid var(--tf-border); border-radius: 6px; font-size: 10.5px; font-weight: 600; flex: 0 0 auto;
+}
+.tomfly-node-sub { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
+.tomfly-node-addr { font-size: 12.5px; color: var(--tf-text3); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tomfly-chip {
+	padding: 1px 8px; background: var(--tf-card2); border: 1px solid var(--tf-border);
+	color: var(--tf-text3); border-radius: 6px; font-size: 11px; font-weight: 600;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.tomfly-node-r { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+
+/* protocol type badge */
+.tomfly-type {
+	padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700;
+	letter-spacing: .04em; flex: 0 0 auto;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	color: #6366f1; background: rgba(99, 102, 241, .13);
+}
+.tomfly-type-vless  { color: #6366f1; background: rgba(99, 102, 241, .13); }
+.tomfly-type-vmess  { color: #0ea5e9; background: rgba(14, 165, 233, .14); }
+.tomfly-type-trojan { color: #e08600; background: rgba(224, 134, 0, .15); }
+.tomfly-type-ss     { color: #10b981; background: rgba(16, 185, 129, .15); }
+.tomfly-type-hy2,
+.tomfly-type-hysteria2 { color: #a855f7; background: rgba(168, 85, 247, .14); }
+.tomfly-type-tuic   { color: #8b5cf6; background: rgba(139, 92, 246, .14); }
+.tomfly-type-anytls { color: #ec4899; background: rgba(236, 72, 153, .13); }
+.tomfly-type-naive  { color: #14b8a6; background: rgba(20, 184, 166, .14); }
+
+/* latency pill */
+.tomfly-lat { padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tomfly-lat-good { color: var(--tf-success); background: var(--tf-success-soft); }
+.tomfly-lat-ok   { color: #d68a00; background: rgba(214, 138, 0, .15); }
+.tomfly-lat-bad  { color: var(--tf-danger); background: var(--tf-danger-soft); }
+.tomfly-lat-none { color: var(--tf-text3); font-weight: 600; }
+
+/* incompatible warning */
+.tomfly-node-warn {
+	display: flex; align-items: center; gap: 9px; padding: 10px 14px;
+	background: var(--tf-warning-soft); border: 1px solid var(--tf-border);
+	border-radius: 10px; font-size: 12.5px; font-weight: 550; color: var(--tf-warning);
+}
+.tomfly-node-warn .tomfly-i { flex: 0 0 auto; }
+
+/* row dropdown menu */
+.tomfly-menu {
+	position: absolute; top: 54px; right: 16px; z-index: 40; min-width: 132px; padding: 6px;
+	background: var(--tf-card); border: 1px solid var(--tf-border2);
+	border-radius: 11px; box-shadow: var(--tf-shadow);
+}
+.tomfly-menu-item {
+	display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: 8px;
+	font-size: 13px; font-weight: 550; color: var(--tf-text); cursor: pointer;
+}
+.tomfly-menu-item:hover { background: var(--tf-card2); }
+.tomfly-menu-item.danger { color: var(--tf-danger); }
+.tomfly-menu-item.danger:hover { background: var(--tf-danger-soft); }
+.tomfly-menu-item .tomfly-i svg { width: 15px; height: 15px; }
+
+/* ── Groups ─────────────────────────────────────────────── */
+.tomfly-groups { display: flex; flex-direction: column; gap: 14px; }
+.tomfly-group { padding: 20px 22px; }
+.tomfly-group-grid { display: grid; grid-template-columns: 1.2fr 1.3fr 120px auto; gap: 16px; align-items: end; }
+.tomfly-members { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+.tomfly-member {
+	display: inline-flex; align-items: center; gap: 7px; padding: 5px 7px 5px 12px;
+	background: var(--tf-card2); border: 1px solid var(--tf-border); border-radius: 9px;
+	font-size: 12.5px; font-weight: 550; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.tomfly-member button {
+	display: flex; padding: 0; border: none; background: none;
+	color: var(--tf-text3); cursor: pointer; line-height: 1;
+}
+.tomfly-member button:hover { color: var(--tf-danger); }
+.tomfly-member-add {
+	padding: 8px 12px; border: 1px dashed var(--tf-border2); border-radius: 9px;
+	background: transparent; color: var(--tf-text2); font-size: 12.5px; cursor: pointer;
+	width: auto; min-width: 0;
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239aa6b6' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+	background-repeat: no-repeat; background-position: right 11px center; padding-right: 32px;
+	-webkit-appearance: none; appearance: none;
 }
 
-/* ── Traffic chart legend (HTML, below canvas) ──────────── */
-.tomfly-chart-wrap { margin: 0 0 12px; }
-.tomfly-chart-legend {
-	display: flex;
-	gap: 18px;
-	align-items: center;
-	margin: 2px 0 0 4px;
-}
-.tomfly-legend-item {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 12px;
-	color: var(--text-color-low, #8a8a8a);
-}
-.tomfly-legend-swatch {
-	width: 12px;
-	height: 4px;
-	border-radius: 3px;
-	display: inline-block;
-}
-.tomfly-legend-up   { background: #3fb950; }
-.tomfly-legend-down { background: #58a6ff; }
+/* ── Rules: how-applied steps ───────────────────────────── */
+.tomfly-steps { display: flex; flex-direction: column; gap: 13px; }
+.tomfly-step { display: flex; gap: 11px; font-size: 13px; line-height: 1.5; color: var(--tf-text2); }
+.tomfly-step-n { color: var(--tf-accent); font-weight: 700; flex: 0 0 auto; }
+.tomfly-list-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.tomfly-list-dot { width: 8px; height: 8px; border-radius: 3px; flex: 0 0 auto; }
+.tomfly-list-dot.proxy { background: var(--tf-accent); }
+.tomfly-list-dot.direct { background: var(--tf-success); }
 
-/* ── Node sort buttons ────────────────────────────────── */
-.tomfly-sort-btns {
-	display: inline-flex;
-	flex-direction: column;
-	gap: 1px;
-	margin-right: 6px;
-	vertical-align: middle;
+/* ── Kernel cards ───────────────────────────────────────── */
+.tomfly-core-bar {
+	display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px;
 }
-.tomfly-sort-btn {
-	padding: 0 6px;
-	font-size: 10px;
-	line-height: 16px;
-	min-width: auto;
-	border-radius: 3px;
+.tomfly-core-l { display: flex; align-items: center; gap: 15px; min-width: 0; }
+.tomfly-avatar {
+	width: 46px; height: 46px; border-radius: 13px; flex: 0 0 auto;
+	display: flex; align-items: center; justify-content: center;
+	font-weight: 800; font-size: 20px;
+}
+.tomfly-avatar-accent { background: var(--tf-accent-soft); color: var(--tf-accent); }
+.tomfly-avatar-blue { background: rgba(59, 130, 246, .13); color: #3b82f6; }
+.tomfly-avatar-red { background: rgba(239, 68, 68, .12); color: #ef4444; }
+.tomfly-core-name { font-size: 15px; font-weight: 700; }
+.tomfly-core-desc { font-size: 12.5px; color: var(--tf-text3); margin-top: 2px; }
+.tomfly-section-head { display: flex; align-items: baseline; gap: 11px; margin: 24px 2px 14px; flex-wrap: wrap; }
+.tomfly-section-hint { font-size: 12.5px; color: var(--tf-text3); }
+.tomfly-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.tomfly-kcard {
+	display: flex; flex-direction: column; align-items: center; text-align: center;
+	padding: 22px 18px; height: 100%;
+}
+.tomfly-kcard .tomfly-avatar { width: 48px; height: 48px; border-radius: 14px; font-size: 21px; margin: 0 auto; }
+.tomfly-kcard-name { font-size: 14.5px; font-weight: 700; margin-top: 13px; }
+.tomfly-kcard-desc { font-size: 11.5px; color: var(--tf-text3); margin-top: 5px; line-height: 1.5; min-height: 32px; }
+.tomfly-kcard-files {
+	width: 100%; background: var(--tf-card2); border: 1px solid var(--tf-border);
+	border-radius: 10px; padding: 10px 12px; margin-top: 12px; text-align: left;
+}
+.tomfly-kcard-file { font-size: 11px; color: var(--tf-text2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.7; }
+.tomfly-kcard-updated { font-size: 11px; color: var(--tf-text3); margin-top: 10px; }
+.tomfly-kstatus {
+	display: inline-flex; align-items: center; gap: 6px; margin-top: auto;
+	padding: 4px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+}
+.tomfly-kstatus.ok { background: var(--tf-success-soft); color: var(--tf-success); }
+.tomfly-kstatus.off { background: var(--tf-danger-soft); color: var(--tf-danger); }
+.tomfly-kstatus .tomfly-i svg { width: 12px; height: 12px; }
+.tomfly-kcard-actions { display: flex; gap: 8px; margin-top: 14px; width: 100%; }
+.tomfly-kcard-actions .tomfly-btn-primary { flex: 1; }
+
+/* ── Logs ───────────────────────────────────────────────── */
+.tomfly-log-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.tomfly-filters { display: flex; align-items: center; gap: 6px; padding: 5px; background: var(--tf-card); border: 1px solid var(--tf-border); border-radius: 11px; box-shadow: var(--tf-shadow-sm); }
+.tomfly-filter { padding: 6px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 550; color: var(--tf-text2); cursor: pointer; transition: all .15s; }
+.tomfly-filter:hover { background: var(--tf-card2); color: var(--tf-text); }
+.tomfly-filter.active { background: var(--tf-accent); color: var(--tf-accent-contrast); font-weight: 650; }
+.tomfly-search { display: flex; align-items: center; gap: 8px; padding: 0 13px; background: var(--tf-card); border: 1px solid var(--tf-border2); border-radius: 10px; }
+.tomfly-search .tomfly-i { color: var(--tf-text3); }
+.tomfly-search input { width: 200px; padding: 9px 0; border: none; background: transparent; color: var(--tf-text); font-size: 13px; outline: none; }
+.tomfly-log-card { padding: 0; overflow: hidden; }
+.tomfly-log-head { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px; border-bottom: 1px solid var(--tf-border); }
+.tomfly-log-title { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 650; }
+.tomfly-log-body { max-height: 560px; overflow: auto; }
+.tomfly-log-row {
+	display: flex; align-items: baseline; gap: 14px; padding: 9px 18px;
+	border-bottom: 1px solid var(--tf-border);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+}
+.tomfly-log-row:last-child { border-bottom: none; }
+.tomfly-log-time { color: var(--tf-text3); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.tomfly-log-msg { color: var(--tf-text); word-break: break-all; }
+.tomfly-log-lvl { flex: 0 0 auto; min-width: 46px; text-align: center; padding: 2px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; }
+.tomfly-log-lvl.info { color: var(--tf-accent); background: var(--tf-accent-soft); }
+.tomfly-log-lvl.warn { color: var(--tf-warning); background: var(--tf-warning-soft); }
+.tomfly-log-lvl.error { color: var(--tf-danger); background: var(--tf-danger-soft); }
+.tomfly-log-lvl.debug { color: var(--tf-text3); background: var(--tf-card2); }
+.tomfly-log-empty { padding: 30px; text-align: center; color: var(--tf-text3); font-size: 13px; }
+
+/* ── Empty / footer ─────────────────────────────────────── */
+.tomfly-empty { text-align: center; padding: 34px; color: var(--tf-text3); font-size: 13.5px; }
+.tomfly-foot { text-align: center; font-size: 12px; color: var(--tf-text3); margin-top: 26px; }
+
+/* ── Modal content (LuCI modal, restyled inner bits) ────── */
+.tomfly-modal .tomfly-flabel { margin-top: 12px; }
+.tomfly-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.tomfly-modal-expects { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0; }
+.tomfly-dropzone {
+	display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+	padding: 26px 20px; border: 1.5px dashed var(--tf-border2); border-radius: 14px;
+	background: var(--tf-card2); cursor: pointer; text-align: center; transition: border-color .15s, background .15s;
+}
+.tomfly-dropzone:hover, .tomfly-dropzone.drag { border-color: var(--tf-accent); background: var(--tf-accent-soft); }
+.tomfly-dropzone-ic { width: 46px; height: 46px; border-radius: 13px; background: var(--tf-accent-soft); color: var(--tf-accent); display: flex; align-items: center; justify-content: center; }
+.tomfly-node-picker { max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.tomfly-pick {
+	display: block; width: 100%; text-align: left; padding: 10px 14px;
+	border: 1px solid var(--tf-border2); border-radius: 10px; background: var(--tf-card);
+	color: var(--tf-text); font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.tomfly-pick:hover { background: var(--tf-card2); }
+.tomfly-pick.on { border-color: var(--tf-accent); background: var(--tf-accent-soft); color: var(--tf-accent); }
+
+/* connection list */
+.tomfly-conn-list { max-height: 420px; overflow-y: auto; margin: 4px 0 10px; }
+.tomfly-conn-item { padding: 11px 0; border-bottom: 1px solid var(--tf-border); }
+.tomfly-conn-item:last-child { border-bottom: none; }
+.tomfly-conn-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tomfly-conn-host { font-weight: 650; font-size: 13.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tomfly-conn-traffic { font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--tf-text3); white-space: nowrap; flex: 0 0 auto; }
+.tomfly-conn-meta { font-size: 11.5px; color: var(--tf-text3); margin-top: 3px; }
+.tomfly-conn-src { font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--tf-text3); margin-top: 2px; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 980px) {
+	.tomfly-metrics { grid-template-columns: repeat(2, 1fr); }
+	.tomfly-grid-2 { grid-template-columns: 1fr; }
+	.tomfly-grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+	.tomfly-app { padding: 16px 14px 24px; }
+	.tomfly-metrics { grid-template-columns: 1fr; }
+	.tomfly-grid-4 { grid-template-columns: 1fr; }
+	.tomfly-group-grid { grid-template-columns: 1fr; }
+	.tomfly-node-r { flex-wrap: wrap; }
 }

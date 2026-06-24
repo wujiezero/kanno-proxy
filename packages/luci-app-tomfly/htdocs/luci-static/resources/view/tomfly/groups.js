@@ -4,11 +4,9 @@
 'require dom';
 'require tomfly.api as api';
 'require tomfly.kernel-profile as kprof';
+'require tomfly.widgets as widgets';
 
-document.querySelector('head').appendChild(E('link', {
-	'rel': 'stylesheet', 'type': 'text/css',
-	'href': L.resource('view/tomfly/style.css')
-}));
+widgets.mount();
 
 function notify(content, ms) {
 	var el = ui.addNotification(null, content);
@@ -27,10 +25,10 @@ return view.extend({
 	groupCard: function (g, gi) {
 		var self = this;
 
-		var name = E('input', { 'class': 'cbi-input-text', 'value': g.name || '', 'style': 'min-width:140px' });
+		var name = E('input', { 'class': 'tomfly-input', 'value': g.name || '' });
 		name.addEventListener('change', function () { g.name = this.value; });
 
-		var type = E('select', { 'class': 'cbi-input-select' }, [
+		var type = E('select', { 'class': 'tomfly-select' }, [
 			E('option', { 'value': 'url-test' }, _('URL Test (auto)')),
 			E('option', { 'value': 'fallback' }, _('Fallback')),
 			E('option', { 'value': 'load-balance' }, _('Load Balance')),
@@ -39,17 +37,18 @@ return view.extend({
 		type.value = g.type || 'url-test';
 		type.addEventListener('change', function () { g.type = this.value; });
 
-		var interval = E('input', { 'class': 'cbi-input-text', 'type': 'number', 'value': g.interval || 300, 'style': 'width:90px' });
+		var interval = E('input', { 'class': 'tomfly-input', 'type': 'number', 'value': g.interval || 300 });
 		interval.addEventListener('change', function () { g.interval = parseInt(this.value, 10) || 300; });
 
-		var tags = E('div', { 'class': 'tomfly-tags' }, (g.proxies || []).map(function (p) {
-			return E('span', { 'class': 'tomfly-tag' }, [
+		var members = E('div', { 'class': 'tomfly-members' }, (g.proxies || []).map(function (p) {
+			return E('span', { 'class': 'tomfly-member' }, [
 				p,
-				E('button', { 'click': function () { g.proxies.splice(g.proxies.indexOf(p), 1); self.refresh(); } }, '×')
+				E('button', { 'title': _('Remove'), 'click': function () { g.proxies.splice(g.proxies.indexOf(p), 1); self.refresh(); } },
+					widgets.icon('close', 13))
 			]);
 		}));
 
-		var adder = E('select', { 'class': 'cbi-input-select', 'style': 'width:auto' }, [
+		var adder = E('select', { 'class': 'tomfly-member-add' }, [
 			E('option', { 'value': '' }, _('+ add node'))
 		].concat(this.nodeNames.map(function (n) { return E('option', { 'value': n }, n); })));
 		adder.addEventListener('change', function () {
@@ -59,19 +58,20 @@ return view.extend({
 			}
 			this.value = '';
 		});
-		tags.appendChild(adder);
+		members.appendChild(adder);
 
-		return E('div', { 'class': 'tomfly-card' }, [
-			E('div', { 'class': 'tomfly-row', 'style': 'align-items:flex-end;gap:14px' }, [
-				E('div', { 'class': 'tomfly-field', 'style': 'margin:0' }, [E('label', {}, _('Name')), name]),
-				E('div', { 'class': 'tomfly-field', 'style': 'margin:0' }, [E('label', {}, _('Type')), type]),
-				E('div', { 'class': 'tomfly-field', 'style': 'margin:0' }, [E('label', {}, _('Interval (s)')), interval]),
-				E('button', { 'class': 'cbi-button cbi-button-remove', 'click': function () { self.groups.splice(gi, 1); self.refresh(); } }, _('Delete'))
+		return E('div', { 'class': 'tomfly-card tomfly-group' }, [
+			E('div', { 'class': 'tomfly-group-grid' }, [
+				E('div', {}, [E('div', { 'class': 'tomfly-flabel', 'style': 'margin-top:0' }, _('Name')), name]),
+				E('div', {}, [E('div', { 'class': 'tomfly-flabel', 'style': 'margin-top:0' }, _('Type')), type]),
+				E('div', {}, [E('div', { 'class': 'tomfly-flabel', 'style': 'margin-top:0' }, _('Interval (s)')), interval]),
+				E('div', {
+					'class': 'tomfly-iconbtn danger', 'title': _('Delete group'),
+					'click': function () { self.groups.splice(gi, 1); self.refresh(); }
+				}, widgets.icon('trash', 16))
 			]),
-			E('div', { 'class': 'tomfly-field', 'style': 'margin:12px 0 0' }, [
-				E('label', {}, _('Nodes in this group')),
-				tags
-			])
+			E('div', { 'class': 'tomfly-flabel', 'style': 'margin:18px 0 9px' }, _('Nodes in this group')),
+			members
 		]);
 	},
 
@@ -83,7 +83,7 @@ return view.extend({
 	renderList: function () {
 		if (!this.groups.length)
 			return E('div', { 'class': 'tomfly-card tomfly-empty' }, _('No groups yet.'));
-		return E('div', {}, this.groups.map(this.groupCard, this));
+		return E('div', { 'class': 'tomfly-groups' }, this.groups.map(this.groupCard, this));
 	},
 
 	render: function (data) {
@@ -92,29 +92,29 @@ return view.extend({
 		var kernel = (data[2] || {}).kernel || 'mihomo';
 		var self = this;
 
-		return E('div', { 'class': 'tomfly' }, [
-			E('div', { 'class': 'tomfly-kernel-banner warn' }, [
+		return E('div', { 'class': 'tomfly-app' }, [
+			widgets.nav('groups', [kprof.badge(kernel)]),
+			widgets.banner('warn', [
 				E('strong', {}, kprof.profile(kernel).label + ': '),
 				_('Custom groups on this page are saved to UCI but not yet applied to the running config. ' +
 					'Both kernels auto-generate AUTO (url-test) and PROXY (selector) groups.')
 			]),
-			E('div', { 'class': 'tomfly-row', 'style': 'margin-bottom:14px' }, [
-				E('h3', { 'style': 'margin:0' }, [
-					_('Proxy Groups'),
-					' ',
+			E('div', { 'class': 'tomfly-page-head' }, [
+				E('div', { 'class': 'tomfly-page-head-l' }, [
+					E('h2', { 'class': 'tomfly-h1' }, _('Proxy Groups')),
 					kprof.badge(kernel)
 				]),
 				E('button', {
-					'class': 'cbi-button cbi-button-add important',
+					'class': 'tomfly-btn tomfly-btn-primary',
 					'click': function () {
 						self.groups.push({ id: '', name: _('New Group'), type: 'url-test', proxies: [], interval: 300, tolerance: 50 });
 						self.refresh();
 					}
-				}, _('New Group'))
+				}, [widgets.icon('plus', 15), _('New Group')])
 			]),
 			E('div', { 'id': 'tomfly-groups' }, this.renderList()),
-			E('div', { 'class': 'cbi-page-actions' }, [
-				E('button', { 'class': 'cbi-button cbi-button-save important', 'click': ui.createHandlerFn(this, 'handleSaveGroups') }, _('Save Groups'))
+			E('div', { 'class': 'tomfly-actions-end' }, [
+				E('button', { 'class': 'tomfly-btn tomfly-btn-primary', 'click': ui.createHandlerFn(this, 'handleSaveGroups') }, _('Save Groups'))
 			])
 		]);
 	},

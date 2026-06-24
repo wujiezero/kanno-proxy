@@ -178,6 +178,7 @@ RES="packages/luci-app-tomfly/htdocs/luci-static/resources"
 # Shared backend client + stylesheet
 download "$RES/tomfly/api.js"         /www/luci-static/resources/tomfly/api.js
 download "$RES/tomfly/kernel-profile.js" /www/luci-static/resources/tomfly/kernel-profile.js
+download "$RES/tomfly/widgets.js"     /www/luci-static/resources/tomfly/widgets.js
 download "$RES/view/tomfly/style.css" /www/luci-static/resources/view/tomfly/style.css
 download "$RES/view/tomfly/logo.png"  /www/luci-static/resources/view/tomfly/logo.png
 

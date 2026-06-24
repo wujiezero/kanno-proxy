@@ -153,6 +153,7 @@ download_critical "$CORE/usr/lib/tomfly/gen_mihomo.sh"  /usr/lib/tomfly/gen_miho
 download_critical "$CORE/usr/lib/tomfly/gen_singbox.sh" /usr/lib/tomfly/gen_singbox.sh 755
 download_critical "$CORE/usr/lib/tomfly/nftables.sh"    /usr/lib/tomfly/nftables.sh    755
 download_critical "$CORE/usr/lib/tomfly/dns.sh"         /usr/lib/tomfly/dns.sh         755
+download_critical "$CORE/usr/lib/tomfly/traffic.sh"     /usr/lib/tomfly/traffic.sh     755
 download_critical "$CORE/usr/lib/tomfly/updater.sh"     /usr/lib/tomfly/updater.sh     755
 download_critical "$CORE/usr/bin/tomfly"                /usr/bin/tomfly                755
 download_critical "$CORE/etc/init.d/tomfly"             /etc/init.d/tomfly             755

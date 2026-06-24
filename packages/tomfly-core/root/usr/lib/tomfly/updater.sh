@@ -85,15 +85,48 @@ get_download_url() {
         grep -m1 "$pattern"
 }
 
+# Fetch a GitHub release asset to a file, trying fast mainland-China mirrors
+# before the canonical github.com URL. Release binaries (kernels) have no CDN
+# fallback of their own, and github.com is frequently blocked/throttled on CN
+# networks, so api.github.com can resolve the asset URL while the download then
+# times out. ghfast.top is fastest in testing; gh-proxy.com is a backup; direct
+# github.com is last so it still wins where reachable (e.g. abroad).
+_curl_github_to() {
+    local url="$1" out="$2" m
+    for m in \
+        "https://ghfast.top/${url}" \
+        "${url}" \
+        "https://gh-proxy.com/${url}"
+    do
+        if curl -fL --connect-timeout 10 --speed-limit 5120 --speed-time 20 \
+            --max-time 300 --progress-bar -o "$out" "$m" 2>&1; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 download_and_verify() {
-    local url="$1" dest="$2"
+    local url="$1" dest="$2" mirror="${3:-0}"
     local fname
     fname=$(basename "$url")
     local tmpfile="/tmp/tomfly-dl-${fname}"
     local size
 
     progress "Downloading: $fname"
-    if ! curl -fL --max-time 180 --progress-bar -o "$tmpfile" "$url" 2>&1; then
+    if [ "$mirror" = "1" ]; then
+        # Kernel binaries: try CN mirrors first (no other fallback exists).
+        if ! _curl_github_to "$url" "$tmpfile"; then
+            log_error "download failed: $url"
+            rm -f "$tmpfile"
+            return 1
+        fi
+    # Other assets (e.g. geodata) keep their own CDN fallback at the caller.
+    # --connect-timeout fails fast when github.com is unreachable; --speed-time
+    # also bails (~20s) when it connects but then stalls mid-transfer, instead
+    # of hanging for the full --max-time before the fallback kicks in.
+    elif ! curl -fL --connect-timeout 10 --speed-limit 5120 --speed-time 20 \
+        --max-time 180 --progress-bar -o "$tmpfile" "$url" 2>&1; then
         log_error "download failed: $url"
         rm -f "$tmpfile"
         return 1
@@ -191,7 +224,7 @@ update_mihomo() {
         return 1
     fi
 
-    download_and_verify "$url" "$MIHOMO_BIN" || return 1
+    download_and_verify "$url" "$MIHOMO_BIN" 1 || return 1
     echo "$tag" > "${TOMFLY_DIR}/mihomo.version"
     log_info "mihomo updated to $tag"
 }
@@ -222,7 +255,7 @@ update_singbox() {
             if [ -n "$pkg_url" ]; then
                 pkg_file="/tmp/$(basename "$pkg_url")"
                 progress "Selected OpenWrt package: $(basename "$pkg_url")"
-                if curl -fL --max-time 180 --progress-bar -o "$pkg_file" "$pkg_url" 2>&1; then
+                if _curl_github_to "$pkg_url" "$pkg_file"; then
                     if [ "$pkg_suffix" = "apk" ]; then
                         apk add --allow-untrusted "$pkg_file" || log_warn "apk install failed, falling back to tarball"
                     else
@@ -258,7 +291,7 @@ update_singbox() {
 
     local tmpfile="/tmp/tomfly-singbox-${tag}.tar.gz"
     progress "Downloading: $(basename "$url")"
-    if ! curl -fL --max-time 180 --progress-bar -o "$tmpfile" "$url" 2>&1; then
+    if ! _curl_github_to "$url" "$tmpfile"; then
         log_error "sing-box download failed"
         rm -f "$tmpfile"
         return 1
@@ -302,12 +335,15 @@ update_geodata_mihomo() {
 
     progress "Downloading mihomo GeoData (geoip.dat + geosite.dat)..."
     for f in geoip.dat geosite.dat; do
+        # jsDelivr first: fastest + reliable on CN networks. The github.com
+        # release asset is canonical but often blocked/throttled (it can even
+        # connect then stall mid-transfer), so it is the fallback.
         if download_and_verify \
-            "https://github.com/${GEODATA_REPO}/releases/latest/download/${f}" \
+            "https://cdn.jsdelivr.net/gh/${GEODATA_REPO}@release/${f}" \
             "${GEODATA_DIR}/${f}"; then
             ok=$((ok + 1))
         elif download_and_verify \
-            "https://cdn.jsdelivr.net/gh/${GEODATA_REPO}@release/${f}" \
+            "https://github.com/${GEODATA_REPO}/releases/latest/download/${f}" \
             "${GEODATA_DIR}/${f}"; then
             ok=$((ok + 1))
         else
@@ -426,6 +462,7 @@ update_core() {
     _tf_fetch_script "packages/tomfly-core/root/usr/lib/tomfly/capabilities.sh" "/usr/lib/tomfly/capabilities.sh" 755 && ok=$((ok + 1)) || fail=$((fail + 1))
     _tf_fetch_script "packages/tomfly-core/root/usr/lib/tomfly/nftables.sh" "/usr/lib/tomfly/nftables.sh" 755 && ok=$((ok + 1)) || fail=$((fail + 1))
     _tf_fetch_script "packages/tomfly-core/root/usr/lib/tomfly/dns.sh" "/usr/lib/tomfly/dns.sh" 755 && ok=$((ok + 1)) || fail=$((fail + 1))
+    _tf_fetch_script "packages/tomfly-core/root/usr/lib/tomfly/traffic.sh" "/usr/lib/tomfly/traffic.sh" 755 && ok=$((ok + 1)) || fail=$((fail + 1))
     _tf_fetch_script "packages/tomfly-core/root/usr/bin/tomfly" "/usr/bin/tomfly" 755 && ok=$((ok + 1)) || fail=$((fail + 1))
 
     progress "Updating TomFly LuCI UI..."

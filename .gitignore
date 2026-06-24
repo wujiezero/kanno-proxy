@@ -9,6 +9,9 @@ packages/*/ipkg-*/
 packages/*/build_dir/
 src/web/.vite/
 
+# Kiro spec local metadata (sidecar to tasks.md; specs themselves stay tracked)
+*.meta.json
+
 # Override global gitignore rules (e.g. bin/) for OpenWrt package files
 !packages/**/bin/
 !packages/**/bin/*

@@ -8,6 +8,7 @@
 . /usr/lib/tomfly/gen_singbox.sh
 . /usr/lib/tomfly/nftables.sh
 . /usr/lib/tomfly/dns.sh
+. /usr/lib/tomfly/traffic.sh
 . /usr/lib/tomfly/updater.sh
 
 _kernel() { uci -q get tomfly.global.kernel 2>/dev/null || echo "mihomo"; }
@@ -118,7 +119,18 @@ start_kernel() {
         "$bin" -d "$GEODATA_DIR" -f "$cfg" >>"$TOMFLY_LOG" 2>&1 &
         echo $! > "$MIHOMO_PID"
     fi
-    log_info "$kernel started (pid $!)"
+    local kpid=$!
+
+    # OOM hardening: when memory runs tight, sacrifice the proxy kernel before
+    # SSH. Mark the kernel as a preferred OOM victim (+500) and protect every
+    # dropbear (SSH) process (-800) so management access survives.
+    [ -n "$kpid" ] && echo 500 > "/proc/$kpid/oom_score_adj" 2>/dev/null
+    local dpid
+    for dpid in $(pidof dropbear 2>/dev/null); do
+        echo -800 > "/proc/$dpid/oom_score_adj" 2>/dev/null
+    done
+
+    log_info "$kernel started (pid $kpid)"
 }
 
 stop_kernel() {
@@ -128,9 +140,21 @@ stop_kernel() {
         kill "$pid" 2>/dev/null && log_info "stopped pid $pid"
         rm -f "$pid_file"
     done
+    # Send SIGTERM, then poll until the kernel actually exits (up to ~5s).
+    # sing-box needs this grace window to tear down its own auto_route /
+    # auto_redirect state (ip rules + private routing tables); killing it too
+    # early leaves that state behind and can lock out the router's own
+    # management access. Only escalate to SIGKILL if it is still alive.
     killall mihomo sing-box 2>/dev/null
-    sleep 1
-    killall -9 mihomo sing-box 2>/dev/null
+    local i=0
+    while [ "$i" -lt 5 ]; do
+        pidof mihomo >/dev/null 2>&1 || pidof sing-box >/dev/null 2>&1 || break
+        sleep 1
+        i=$(( i + 1 ))
+    done
+    if pidof mihomo >/dev/null 2>&1 || pidof sing-box >/dev/null 2>&1; then
+        killall -9 mihomo sing-box 2>/dev/null
+    fi
 }
 
 reload_kernel() {
@@ -149,23 +173,40 @@ reload_kernel() {
     esac
 }
 
+# Probe the local management channel (SSH / dropbear) on 127.0.0.1.
+# Returns 0 ONLY when the port is definitively reachable; any uncertainty
+# (no nc available, probe error) returns non-zero, so callers never roll back
+# on a guess. Mirrors the busybox-nc style used in _tcp_probe_ms.
+_mgmt_probe() {
+    command -v nc >/dev/null 2>&1 || return 1
+    local port
+    port=$(uci -q get dropbear.@dropbear[0].Port 2>/dev/null)
+    [ -n "$port" ] || port=22
+    nc -z -w2 127.0.0.1 "$port" 2>/dev/null \
+        || nc -z -w 2 127.0.0.1 "$port" 2>/dev/null
+}
+
 tomfly_start() {
     local lockfile="/tmp/tomfly.lock"
-    if [ -f "$lockfile" ]; then
-        local lock_pid=$(cat "$lockfile" 2>/dev/null)
-        if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
-            log_info "another tomfly instance is running (pid $lock_pid), skip"
-            return 0
-        fi
-        rm -f "$lockfile"
+    # Acquire an exclusive flock(1) lock — no PID-recycling races, automatically
+    # released when the shell exits.  flock is part of util-linux / busybox.
+    mkdir -p /var/lock 2>/dev/null
+    exec 9>"$lockfile"
+    if ! flock -n 9; then
+        log_warn "another tomfly instance holds the lock — aborting start"
+        return 0
     fi
-    echo $$ > "$lockfile"
     log_info "TomFly starting..."
+
+    # Capture the management-channel baseline BEFORE touching the data plane,
+    # so we can detect (and undo) a start that locks us out of SSH.
+    local mgmt_before=0
+    _mgmt_probe && mgmt_before=1
 
     local plane=$(_dataplane)
     [ "$plane" = "tun" ] && _ensure_tun_dev
 
-    start_kernel || { rm -f "$lockfile"; return 1; }
+    start_kernel || return 1
     sleep 2
 
     # A TUN data-plane is only real if the kernel actually created its
@@ -178,7 +219,17 @@ tomfly_start() {
             log_warn "TUN interface '$tun_if' did not come up — falling back to TPROXY"
             TOMFLY_FORCE_TPROXY=1; export TOMFLY_FORCE_TPROXY
             stop_kernel
-            start_kernel || { unset TOMFLY_FORCE_TPROXY; rm -f "$lockfile"; return 1; }
+            if [ "$(_kernel)" = "singbox" ]; then
+                # sing-box has no TPROXY inbound configured by default — we
+                # must generate a new config with a tproxy listener instead.
+                log_warn "reconfiguring sing-box for TPROXY fallback..."
+                _singbox_tproxy_fallback=1
+                export _singbox_tproxy_fallback
+                start_kernel || return 1
+                unset _singbox_tproxy_fallback
+            else
+                start_kernel || return 1
+            fi
             unset TOMFLY_FORCE_TPROXY
             sleep 1
             plane=tproxy
@@ -193,8 +244,20 @@ tomfly_start() {
         log_info "TUN data-plane — kernel manages routing; skipping tproxy nftables"
     fi
     setup_dns
+
+    # Safety net: if SSH was reachable before we started but is not anymore,
+    # the data plane has locked out management access — roll back immediately
+    # instead of leaving the router unreachable. Only fires on a clear
+    # before-reachable / after-unreachable transition to avoid false positives
+    # (custom SSH port, no nc, transient probe failure → no rollback).
+    if [ "$mgmt_before" = "1" ] && ! _mgmt_probe; then
+        log_error "management channel lost after start — auto-rolling back to protect access"
+        tomfly_stop
+        return 1
+    fi
+
     log_info "TomFly started"
-    rm -f "$lockfile"
+    # flock released automatically when fd 9 closes (shell exits)
 }
 
 tomfly_stop() {
@@ -209,6 +272,23 @@ tomfly_stop() {
     nft delete table inet sing-box 2>/dev/null
     ip link del Meta 2>/dev/null
     ip link del TomFly 2>/dev/null
+    # Best-effort cleanup of sing-box auto_route leftovers (its own ip rules +
+    # private routing tables) in case the kernel was killed before it could
+    # self-clean. NOTE: sing-box's default table numbers vary by version
+    # (commonly 2022 for IPv4 and 2023 for IPv6) — confirm on the real device.
+    # All operations are best-effort and silenced.
+    local _t _p
+    for _t in 2022 2023; do
+        ip route flush table "$_t" 2>/dev/null
+        ip -6 route flush table "$_t" 2>/dev/null
+    done
+    # Drop any dangling ip rules that look up those tables (delete by priority).
+    for _p in $(ip rule show 2>/dev/null | awk -F: '/lookup (2022|2023)/{gsub(/[^0-9]/,"",$1); if ($1!="") print $1}'); do
+        ip rule del priority "$_p" 2>/dev/null
+    done
+    for _p in $(ip -6 rule show 2>/dev/null | awk -F: '/lookup (2022|2023)/{gsub(/[^0-9]/,"",$1); if ($1!="") print $1}'); do
+        ip -6 rule del priority "$_p" 2>/dev/null
+    done
     log_info "TomFly stopped"
 }
 
@@ -373,6 +453,95 @@ tomfly_clear_log() {
     echo "Log cleared"
 }
 
+# Backup TomFly configuration to a tar.gz
+tomfly_backup() {
+    local out="${1:-/tmp/tomfly-backup-$(date +%Y%m%d-%H%M%S).tar.gz}"
+    local tmp="/tmp/tomfly-bkp-$$"
+    mkdir -p "$tmp/tomfly"
+    uci export tomfly > "$tmp/tomfly/config.uci" 2>/dev/null || true
+    [ -d "$RULES_DIR" ] && cp -r "$RULES_DIR" "$tmp/tomfly/rules" 2>/dev/null
+    [ -d "$GEODATA_DIR" ] && cp -r "$GEODATA_DIR" "$tmp/tomfly/geodata" 2>/dev/null
+    (cd "$tmp" && tar -czf "$out" tomfly 2>/dev/null)
+    rm -rf "$tmp"
+    if [ -f "$out" ]; then
+        echo "$out"
+        log_info "backup saved to $out"
+    else
+        echo "backup failed" >&2
+        return 1
+    fi
+}
+
+# Restore TomFly configuration from a backup tar.gz
+# Move a node up or down in the manual sort order
+tomfly_reorder() {
+    local id="$1" dir="$2"
+    [ -z "$id" ] && { echo "Usage: tomfly reorder <node_id> up|down" >&2; return 1; }
+    case "$dir" in up|down) ;; *) echo "Usage: tomfly reorder <node_id> up|down" >&2; return 1 ;; esac
+
+    local sec="proxy_${id}" my_order
+    my_order=$(uci -q get "tomfly.${sec}.order" 2>/dev/null)
+    [ -z "$my_order" ] && { echo "node $id not found" >&2; return 1; }
+
+    # Find adjacent node by iterating all proxy sections
+    local other_sec="" other_order="" best_order o s
+    if [ "$dir" = "up" ]; then best_order=0; else best_order=999999; fi
+
+    for s in $(uci show tomfly 2>/dev/null | sed -n 's/^tomfly\.\(proxy_[0-9a-f]*\)\.type=.*/\1/p'); do
+        [ "$s" = "$sec" ] && continue
+        o=$(uci -q get "tomfly.${s}.order" 2>/dev/null)
+        [ -z "$o" ] && continue
+        if [ "$dir" = "up" ]; then
+            [ "$o" -lt "$my_order" ] && [ "$o" -gt "$best_order" ] && { best_order="$o"; other_sec="$s"; }
+        else
+            [ "$o" -gt "$my_order" ] && [ "$o" -lt "$best_order" ] && { best_order="$o"; other_sec="$s"; }
+        fi
+    done
+
+    if [ -z "$other_sec" ]; then
+        [ "$dir" = "up" ] && echo "already at top" || echo "already at bottom"
+        return 0
+    fi
+
+    other_order=$(uci -q get "tomfly.${other_sec}.order" 2>/dev/null)
+    [ -z "$other_order" ] && { echo "adjacent node order not found" >&2; return 1; }
+
+    # Swap orders
+    uci -q set "tomfly.${sec}.order=${other_order}"
+    uci -q set "tomfly.${other_sec}.order=${my_order}"
+    uci commit tomfly
+    echo "moved $id $dir"
+}
+
+tomfly_restore() {
+    local src="$1"
+    [ -z "$src" ] && { echo "Usage: tomfly restore <backup.tar.gz>"; return 1; }
+    [ ! -f "$src" ] && { echo "backup file not found: $src" >&2; return 1; }
+    local tmp="/tmp/tomfly-rst-$$"
+    mkdir -p "$tmp"
+    if ! tar -xzf "$src" -C "$tmp" 2>/dev/null; then
+        log_error "invalid backup file: $src"
+        rm -rf "$tmp"
+        return 1
+    fi
+    # Restore UCI config
+    if [ -f "$tmp/tomfly/config.uci" ]; then
+        uci import tomfly < "$tmp/tomfly/config.uci" 2>/dev/null &&             uci commit tomfly && log_info "config restored"
+    fi
+    # Restore rule files
+    if [ -d "$tmp/tomfly/rules" ]; then
+        mkdir -p "$RULES_DIR"
+        cp -r "$tmp/tomfly/rules/"* "$RULES_DIR/" 2>/dev/null &&             log_info "rules restored"
+    fi
+    # Restore geodata (skip if already newer)
+    if [ -d "$tmp/tomfly/geodata" ] && [ ! -f "$GEODATA_DIR/version" ]; then
+        mkdir -p "$GEODATA_DIR"
+        cp -r "$tmp/tomfly/geodata/"* "$GEODATA_DIR/" 2>/dev/null &&             log_info "geodata restored"
+    fi
+    rm -rf "$tmp"
+    echo "restored from $src"
+}
+
 case "${1:-help}" in
     start)   tomfly_start ;;
     stop)    tomfly_stop ;;
@@ -384,6 +553,10 @@ case "${1:-help}" in
     list)    tomfly_list ;;
     test)      tomfly_test "$2" ;;
     clear_log) tomfly_clear_log ;;
+    backup)       tomfly_backup "$2" ;;
+    restore)      tomfly_restore "$2" ;;
+    reorder)       tomfly_reorder "$2" "$3" ;;
+    traffic)          tomfly_traffic ;;
     update)
         case "$2" in
         mihomo)  update_mihomo ;;
@@ -409,6 +582,9 @@ Commands:
   del <id>           Remove a proxy node
   list               List all proxy nodes
   test <id>          Test node connectivity
+  backup [file]       Backup config + rules + geodata to tar.gz
+  restore <file>      Restore from a backup tar.gz
+  clear_log           Clear the log file
   update core         Update TomFly scripts (gen_*, tomfly)
   update mihomo      Update mihomo kernel
   update singbox     Update sing-box kernel

@@ -13,6 +13,17 @@ start() {
     $PROG start
 }
 
+# Boot-time entry point (invoked by procd via the rc.d symlink). Gate auto-start
+# on tomfly.global.autostart (default 0 = do NOT start on boot). Manual
+# `/etc/init.d/tomfly start`, `tomfly start`, and the UI start button all call
+# start() directly and are unaffected by this switch.
+boot() {
+    local autostart
+    autostart=$(uci -q get tomfly.global.autostart 2>/dev/null)
+    [ "${autostart:-0}" = "1" ] || return 0
+    start
+}
+
 stop() {
     $PROG stop
 }

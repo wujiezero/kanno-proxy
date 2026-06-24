@@ -33,6 +33,136 @@ function notify(content, ms) {
 }
 
 var _prevUp = 0, _prevDown = 0, _prevTs = 0;
+/* Traffic chart — tracks last 60 samples (~3 min at 3s poll) */
+var _chartUp = [], _chartDown = [], _chartMax = 60;
+var _chartResizeBound = false;
+
+function hexToRgba(hex, a) {
+	var h = hex.replace('#', '');
+	var r = parseInt(h.substring(0, 2), 16);
+	var g = parseInt(h.substring(2, 4), 16);
+	var b = parseInt(h.substring(4, 6), 16);
+	return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+}
+
+function chartColors() {
+	var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+	return {
+		dark: dark,
+		bg:   dark ? '#161b22' : '#f6f8fa',
+		grid: dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)',
+		text: dark ? '#8b949e' : '#6b7280',
+		up:   '#3fb950',
+		down: '#58a6ff'
+	};
+}
+
+/* Format a rate for the Y-axis. Unit is chosen from the axis max so labels
+   stay consistent; decimals keep low-traffic labels distinct (no "1 K" dupes). */
+function fmtRate(bps, max) {
+	if (max >= 1048576) {
+		var m = bps / 1048576;
+		return (m >= 10 ? m.toFixed(0) : m.toFixed(1)) + ' M';
+	}
+	var k = bps / 1024;
+	return (k >= 10 ? k.toFixed(0) : k.toFixed(1)) + ' K';
+}
+
+function drawChart() {
+	var cvs = document.getElementById('tomfly-chart');
+	if (!cvs) return;
+	var ctx = cvs.getContext('2d');
+
+	/* Redraw on resize so the high-DPR backing store tracks the layout.
+	   Bound once for the lifetime of the page. */
+	if (!_chartResizeBound) {
+		window.addEventListener('resize', function () { drawChart(); });
+		_chartResizeBound = true;
+	}
+
+	/* Match the backing store to the display size × devicePixelRatio so the
+	   line stays crisp instead of being stretched from a fixed 720×140 buffer. */
+	var dpr = window.devicePixelRatio || 1;
+	var cssW = cvs.clientWidth || 720;
+	var cssH = cvs.clientHeight || 140;
+	var needW = Math.round(cssW * dpr), needH = Math.round(cssH * dpr);
+	if (cvs.width !== needW)  cvs.width = needW;
+	if (cvs.height !== needH) cvs.height = needH;
+	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+	var w = cssW, h = cssH;
+	var pad = 8, graphH = h - pad * 2;
+	var c = chartColors();
+
+	ctx.clearRect(0, 0, w, h);
+	ctx.fillStyle = c.bg;
+	ctx.fillRect(0, 0, w, h);
+
+	var max = 1, i;
+	for (i = 0; i < _chartUp.length; i++) {
+		if (_chartUp[i] > max) max = _chartUp[i];
+		if (_chartDown[i] > max) max = _chartDown[i];
+	}
+	if (max < 1024) max = 1024;   // floor at 1 KB/s so the axis never collapses
+	max = max * 1.15;             // a little headroom above the peak
+
+	/* 3 grid lines with de-duplicated Y labels */
+	var grids = 2;
+	ctx.lineWidth = 1;
+	ctx.strokeStyle = c.grid;
+	ctx.font = '9px monospace';
+	ctx.textAlign = 'left';
+	var lastLabel = null;
+	for (i = 0; i <= grids; i++) {
+		var y = pad + graphH * i / grids;
+		ctx.beginPath();
+		ctx.moveTo(0, y); ctx.lineTo(w, y);
+		ctx.stroke();
+		var label = fmtRate(max * (grids - i) / grids, max);
+		if (label !== lastLabel) {
+			ctx.fillStyle = c.text;
+			ctx.fillText(label, 4, y + (i === 0 ? 10 : -3));
+			lastLabel = label;
+		}
+	}
+
+	var step = (w - pad - 2) / (_chartMax - 1);
+
+	function plot(data, color) {
+		if (data.length < 2) return;
+		var x0 = w - pad - (data.length - 1) * step;
+		var pts = [], j;
+		for (j = 0; j < data.length; j++) {
+			var x = x0 + j * step;
+			var py = pad + graphH - (data[j] || 0) / max * graphH;
+			if (py > pad + graphH) py = pad + graphH;
+			if (py < pad) py = pad;
+			pts.push([x, py]);
+		}
+		// semi-transparent gradient fill under the line
+		var grad = ctx.createLinearGradient(0, pad, 0, pad + graphH);
+		grad.addColorStop(0, hexToRgba(color, c.dark ? 0.34 : 0.26));
+		grad.addColorStop(1, hexToRgba(color, 0));
+		ctx.beginPath();
+		ctx.moveTo(pts[0][0], pad + graphH);
+		for (j = 0; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+		ctx.lineTo(pts[pts.length - 1][0], pad + graphH);
+		ctx.closePath();
+		ctx.fillStyle = grad;
+		ctx.fill();
+		// rounded line on top
+		ctx.beginPath();
+		ctx.strokeStyle = color;
+		ctx.lineWidth = 2.2;
+		ctx.lineJoin = 'round';
+		ctx.lineCap = 'round';
+		ctx.moveTo(pts[0][0], pts[0][1]);
+		for (j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+		ctx.stroke();
+	}
+	plot(_chartDown, c.down);
+	plot(_chartUp, c.up);
+}
 
 function fmtSpeed(bps) {
 	if (bps < 1024) return bps.toFixed(0) + ' B/s';
@@ -99,6 +229,12 @@ return view.extend({
 		_prevDown = t.down || 0;
 		_prevTs = now;
 
+		// Push chart samples
+		_chartUp.push(upSpd); _chartDown.push(dnSpd);
+		while (_chartUp.length > _chartMax) _chartUp.shift();
+		while (_chartDown.length > _chartMax) _chartDown.shift();
+		drawChart();
+
 		return [
 			E('div', { 'class': 'tomfly-card tomfly-stat' }, [
 				E('div', { 'class': 'tomfly-stat-icon tomfly-ic-green' }, svg(ICON.up)),
@@ -163,6 +299,26 @@ return view.extend({
 		var trafficGrid = E('div', { 'id': 'tomfly-traffic', 'class': 'tomfly-grid' },
 			this.trafficInner(traffic));
 
+		var trafficChart = E('canvas', {
+			'id': 'tomfly-chart',
+			'width': '720', 'height': '140',
+			'style': 'display:block;width:100%;max-width:720px;height:140px;border-radius:6px;margin:6px 0 4px'
+		});
+
+		var trafficChartWrap = E('div', { 'class': 'tomfly-chart-wrap' }, [
+			trafficChart,
+			E('div', { 'class': 'tomfly-chart-legend' }, [
+				E('span', { 'class': 'tomfly-legend-item' }, [
+					E('span', { 'class': 'tomfly-legend-swatch tomfly-legend-up' }),
+					E('span', {}, _('Upload'))
+				]),
+				E('span', { 'class': 'tomfly-legend-item' }, [
+					E('span', { 'class': 'tomfly-legend-swatch tomfly-legend-down' }),
+					E('span', {}, _('Download'))
+				])
+			])
+		]);
+
 		var accessSites = [
 			{ name: 'Baidu', url: 'https://www.baidu.com' },
 			{ name: 'Google', url: 'https://www.google.com/generate_204' },
@@ -225,6 +381,12 @@ return view.extend({
 			tunCheck.checked = global.tun !== false;
 		}
 
+		var autostartCheck = E('input', { 'type': 'checkbox', 'id': 'tomfly-autostart', 'style': 'margin-right:6px' });
+		autostartCheck.checked = global.autostart === true;
+
+		var trafficStatsCheck = E('input', { 'type': 'checkbox', 'id': 'tomfly-traffic-stats', 'style': 'margin-right:6px' });
+		trafficStatsCheck.checked = global.traffic_stats !== false;
+
 		var settingsRows = [
 			E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('Proxy Mode')),
@@ -259,6 +421,30 @@ return view.extend({
 			]));
 		}
 
+		settingsRows.push(E('div', { 'class': 'cbi-value' }, [
+			E('label', { 'class': 'cbi-value-title' }, _('Start on Boot')),
+			E('div', { 'class': 'cbi-value-field' }, [
+				E('label', { 'style': 'display:flex;align-items:flex-start;cursor:pointer' }, [
+					autostartCheck,
+					E('span', {}, _('Auto-start the proxy when the router boots'))
+				]),
+				E('div', { 'class': 'tomfly-kernel-note' },
+					_('When off, rebooting the router will not auto-start the proxy (safer).'))
+			])
+		]));
+
+		settingsRows.push(E('div', { 'class': 'cbi-value' }, [
+			E('label', { 'class': 'cbi-value-title' }, _('Traffic Stats')),
+			E('div', { 'class': 'cbi-value-field' }, [
+				E('label', { 'style': 'display:flex;align-items:flex-start;cursor:pointer' }, [
+					trafficStatsCheck,
+					E('span', {}, _('Track per-node monthly traffic'))
+				]),
+				E('div', { 'class': 'tomfly-kernel-note' },
+					_('Turn off to reduce overhead.'))
+			])
+		]));
+
 		var settingsCard = E('div', { 'class': 'tomfly-card' }, [
 			E('div', { 'class': 'tomfly-card-title' }, [
 				_('Quick Settings'),
@@ -277,6 +463,13 @@ return view.extend({
 				}, _('Save & Restart'))
 			])
 		]));
+
+		/* Monthly per-node traffic (GB) */
+		var nodeTrafficCard = E('div', { 'class': 'tomfly-card' }, [
+			E('div', { 'class': 'tomfly-card-title' }, _('Monthly Node Traffic')),
+			E('div', { 'id': 'tomfly-node-traffic', 'class': 'tomfly-muted' },
+				E('span', {}, _('Loading...')))
+		]);
 
 		var quick = E('div', { 'class': 'tomfly-card' }, [
 			E('div', { 'class': 'tomfly-card-title' }, _('Quick Add Node')),
@@ -308,9 +501,54 @@ return view.extend({
 			}, this));
 		}, this), 3);
 
+		/* Update per-node monthly traffic every 10 seconds */
+		poll.add(L.bind(function () {
+			return L.resolveDefault(api.call('get_node_traffic'), {}).then(L.bind(function (r) {
+				var box = document.getElementById('tomfly-node-traffic');
+				if (!box) return;
+				var nodes = r.nodes || {};
+				var keys = Object.keys(nodes);
+				if (!keys.length) {
+					dom.content(box, E('span', { 'class': 'tomfly-muted' },
+						r.running ? _('No traffic data yet') : _('Service not running')));
+					return;
+				}
+				keys.sort(function (a, b) { return (nodes[b] || 0) - (nodes[a] || 0); });
+				var maxBytes = 0;
+				keys.forEach(function (name) {
+					if ((nodes[name] || 0) > maxBytes) maxBytes = nodes[name] || 0;
+				});
+				var rows = keys.map(function (name) {
+					var bytes = nodes[name] || 0;
+					var gb = bytes / 1073741824;
+					var isZero = bytes <= 0;
+					// width relative to the busiest node this month; the max fills
+					// the track, any non-zero value keeps a 4% minimum so it stays visible
+					var width = isZero ? 0 : Math.max(4, maxBytes > 0 ? (bytes / maxBytes * 100) : 0);
+					return E('div', { 'class': 'tomfly-traffic-row' }, [
+						E('span', { 'class': 'tomfly-traffic-name' }, name),
+						E('span', { 'class': 'tomfly-traffic-bar-bg' },
+							E('span', {
+								'class': 'tomfly-traffic-bar' + (isZero ? ' zero' : ''),
+								'style': 'width:' + width + '%'
+							})),
+						E('span', { 'class': 'tomfly-traffic-gb' + (isZero ? ' zero' : '') },
+							gb.toFixed(2) + ' GB')
+					]);
+				});
+				var month = r.month || '';
+				dom.content(box, [
+					month ? E('div', { 'class': 'tomfly-muted', 'style': 'margin-bottom:4px;font-size:12px' },
+						month) : '',
+					E('div', {}, rows)
+				]);
+			}, this));
+		}, this), 10);
+
 		return E('div', { 'class': 'tomfly' }, [
-			statusCard, trafficGrid,
+			statusCard, trafficGrid, trafficChartWrap,
 			E('div', { 'class': 'tomfly-grid-2' }, [accessCard, settingsCard]),
+			nodeTrafficCard,
 			quick
 		]);
 	},
@@ -482,9 +720,15 @@ return view.extend({
 		var mode = document.getElementById('tomfly-mode').value;
 		var dnsMode = document.getElementById('tomfly-dns-mode').value;
 		var tunEl = document.getElementById('tomfly-tun');
+		var autostartEl = document.getElementById('tomfly-autostart');
+		var trafficStatsEl = document.getElementById('tomfly-traffic-stats');
 		var payload = { mode: mode, dns_mode: dnsMode };
 		if (tunEl && !tunEl.disabled)
 			payload.tun = tunEl.checked;
+		if (autostartEl)
+			payload.autostart = autostartEl.checked;
+		if (trafficStatsEl)
+			payload.traffic_stats = trafficStatsEl.checked;
 		return api.call('set_mode', payload).then(function () {
 			return api.call('restart');
 		}).then(function () {

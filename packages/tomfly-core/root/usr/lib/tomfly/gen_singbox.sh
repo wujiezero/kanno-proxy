@@ -169,20 +169,40 @@ _emit_node_bypass_rules() {
 }
 
 _emit_tun_inbound() {
-    local first=1 ip
+    local first=1 ip pn
     printf '    {"type": "tun", "tag": "tun-in", "interface_name": "TomFly", "address": ["172.19.0.1/30"], "auto_route": true, "auto_redirect": true, "strict_route": false, "stack": "system"'
-    if list_node_server_ips | grep -q .; then
-        printf ', "route_exclude_address": ['
-        first=1
-        for ip in $(list_node_server_ips); do
-            [ -z "$ip" ] && continue
+    # Always exclude private/reserved ranges from the TUN so traffic to the LAN
+    # and the router itself NEVER enters the tunnel (prevents locking out the
+    # router's own management access), then append the node server IPs so the
+    # kernel reaches its upstream directly.
+    printf ', "route_exclude_address": ['
+    first=1
+    for pn in 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 169.254.0.0/16 100.64.0.0/10; do
+        [ "$first" = "0" ] && printf ','
+        printf '%s' "$(json_str "$pn")"
+        first=0
+    done
+    if [ "$(_u "global.ipv6")" = "1" ]; then
+        for pn in fc00::/7 fe80::/10; do
             [ "$first" = "0" ] && printf ','
-            printf '%s' "$(json_str "${ip}/32")"
+            printf '%s' "$(json_str "$pn")"
             first=0
         done
-        printf ']'
     fi
+    for ip in $(list_node_server_ips); do
+        [ -z "$ip" ] && continue
+        [ "$first" = "0" ] && printf ','
+        printf '%s' "$(json_str "${ip}/32")"
+        first=0
+    done
+    printf ']'
     printf '}\n'
+}
+
+# sing-box TPROXY inbound — used when TUN is unavailable (fallback from
+# tomfly_start).  Emits a tproxy listener that works like the mihomo one.
+_emit_tproxy_inbound() {
+    printf '    {"type": "tproxy", "tag": "tproxy-in", "listen": "::", "listen_port": 7893, "tcp_fast_open": true, "udp_fragment": true, "sniff": true},\n'
 }
 
 # Prefer local .srs under GEODATA_DIR; fall back to remote CDN (router must reach it).
@@ -234,9 +254,16 @@ generate_singbox_config() {
             log_warn "skipping node $(_u "${sec}.name"): $reason"
         fi
     done
-    while read -r sec; do
-        [ -n "$sec" ] && _u "${sec}.name"
-    done < "$usable" > "$names"
+    # Sort by order to produce names in the right sequence
+    {
+        while read -r sec; do
+            [ -n "$sec" ] || continue
+            local ord; ord=$(_u "${sec}.order"); ord="${ord:-0}"
+            printf '%08d %s\n' "$ord" "$(_u "${sec}.name")"
+        done < "$usable" | sort -n | while read -r _ n; do
+            echo "$n"
+        done
+    } > "$names"
 
     printf '{\n'
     printf '  "log": {"level": %s, "timestamp": true, "output": %s},\n' \
@@ -259,7 +286,12 @@ generate_singbox_config() {
     printf '  },\n'
     printf '  "inbounds": [\n'
     printf '    {"type": "direct", "tag": "dns-in", "listen": "127.0.0.1", "listen_port": %s, "network": "udp"},\n' "$dns_port"
-    _emit_tun_inbound
+    if [ -n "${_singbox_tproxy_fallback:-}${TOMFLY_FORCE_TPROXY:-}" ]; then
+        _emit_tproxy_inbound
+        log_info "sing-box TPROXY fallback inbound written"
+    else
+        _emit_tun_inbound
+    fi
     printf '  ],\n'
     printf '  "outbounds": [\n'
 
@@ -303,6 +335,11 @@ generate_singbox_config() {
     printf ',\n    {"type": "direct", "tag": "DIRECT"}\n'
     printf '  ],\n'
     printf '  "route": {\n'
+    # Stamp sing-box's own outbound sockets with fwmark 768 (matches mihomo's
+    # routing-mark) so the nftables "meta mark 768 return" self-bypass also
+    # covers sing-box. NOTE: the exact field name varies by sing-box version —
+    # verify against the installed build (route.default_mark on current ones).
+    printf '    "default_mark": 768,\n'
     printf '    "default_domain_resolver": "cn-dns",\n'
     printf '    "rules": [\n'
     printf '      {"action": "sniff"},\n'

@@ -1,0 +1,26 @@
+# 实现任务：tomfly-bugfix-ui-polish
+
+- [x] 1. P0 管理通道安全与防锁死
+  - [x] 1.1 sing-box TUN 排除 LAN/路由器自身（gen_singbox.sh：route_exclude_address 追加 LAN 子网；确认 ip_is_private DIRECT 规则）
+  - [x] 1.2 优雅停止与兜底清理（bin/tomfly：stop_kernel SIGTERM 轮询等待再 kill -9；tomfly_stop 清理 auto_route 残留 ip rule/路由表 v4+v6）
+  - [x] 1.3 启动自检 + 自动回滚（bin/tomfly tomfly_start：起代理后校验本机管理端口/LAN 可达，失败则回滚并报错）
+- [x] 2. 开机自启开关（默认关闭）
+  - [x] 2.1 config/tomfly 增加 global.autostart 默认 '0'
+  - [x] 2.2 init.d/tomfly start() 按 autostart 决定开机是否自启（手动启动不受影响）
+  - [x] 2.3 UI 增加“开机自启”开关默认关闭（overview.js + api.js getGlobal/saveGlobal/setMode）
+- [x] 3. OOM 硬化
+  - [x] 3.1 启动时调整 oom_score_adj（dropbear 调低、代理内核调高），可选内存上限（bin/tomfly start_kernel / init.d）
+- [x] 4. 已确认 bug 修复
+  - [x] 4.1 api.js reorderNode 成功后调用 refresh() 刷新 uci 缓存
+  - [x] 4.2 common.sh 新增 list_node_server_ips6()
+  - [x] 4.3 uri_parser.sh parse_vless 名称改为单次解码
+  - [x] 4.4 nftables.sh 删除两处 skgid 53690；gen_singbox.sh 出站加 socket mark 768
+- [x] 5. 流量统计准确版 + 开关
+  - [x] 5.1 config/tomfly 增加 global.traffic_stats 默认 '1'
+  - [x] 5.2 traffic.sh 改为按连接 id 增量累计（状态文件），尊重开关，注意性能
+  - [x] 5.3 （可选）UI 暴露统计开关
+- [x] 6. 概览图表美化
+  - [x] 6.1 overview.js drawChart：DPR 缩放、清理网格标签、面积填充、HTML 图例
+  - [x] 6.2 月度节点流量条：浅色轨道 + 相对比例（overview.js + style.css）
+- [x] 7. 验证
+  - [x] 7.1 对所有改动的 .sh 跑 sh -n（有 shellcheck 则一并）；JS/CSS 人工核对；整理实机“安全复现协议”供用户运行时验证

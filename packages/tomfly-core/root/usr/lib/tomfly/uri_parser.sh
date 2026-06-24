@@ -5,9 +5,22 @@
 . /usr/lib/tomfly/common.sh
 
 urldecode() {
-    local v="$1"
-    v=$(printf '%b' "$(echo "$v" | sed 's/%/\\x/g; s/+/ /g')")
-    echo "$v"
+    # Safe percent-decode: replaces %XX with the corresponding byte using awk.
+    # Unlike printf '%b', this does not misinterpret literal backslash sequences
+    # in the decoded output.  + → space is applied first.
+    echo "$1" | sed 's/+/ /g' | awk '
+    function hex2dec(h) {
+        return index("0123456789ABCDEF", toupper(h)) - 1
+    }
+    {
+        line = $0; result = ""
+        while (match(line, /%[0-9a-fA-F][0-9a-fA-F]/)) {
+            result = result substr(line, 1, RSTART - 1)
+            result = result sprintf("%c", hex2dec(substr(line, RSTART+1, 1)) * 16 + hex2dec(substr(line, RSTART+2, 1)))
+            line = substr(line, RSTART + 3)
+        }
+        print result line
+    }'
 }
 
 _qget() {
@@ -36,7 +49,7 @@ parse_vless() {
     params=$(echo "$userhost" | grep -o '?.*' | cut -c2-)
 
     echo "type=vless"
-    echo "name=$(urldecode "$frag")"
+    echo "name=$frag"
     echo "server=$host"
     echo "port=$port"
     echo "uuid=$uuid"
@@ -72,7 +85,8 @@ parse_vmess() {
     echo "port=$(_jf port)"
     echo "uuid=$(_jf id)"
     echo "alter_id=$(_jf aid)"
-    echo "cipher=${_jf:-auto}"
+    local cipher; cipher=$(_jf cipher)
+    echo "cipher=${cipher:-auto}"
     echo "transport=$(_jf net)"
     echo "transport_host=$(_jf host)"
     echo "transport_path=$(_jf path)"
@@ -268,15 +282,21 @@ parse_uri() {
 # Parse URI and store to UCI; echo the node section id
 uri_to_uci() {
     local uri="$1"
-    local id section parsed
+    local id section parsed max_order
 
     parsed=$(parse_uri "$uri") || return 1
     id=$(tomfly_gen_id)
     section="proxy_${id}"
 
+    # Assign next available order value
+    max_order=$(uci show tomfly 2>/dev/null | sed -n "s/^tomfly\.proxy_[0-9a-f]*\.order='*//p" | sed "s/'*$//" | sort -n | tail -1)
+    max_order="${max_order:-0}"
+    max_order=$(( max_order + 1 ))
+
     uci batch <<-EOF
 		set tomfly.${section}=proxy
 		set tomfly.${section}.enabled=1
+		set tomfly.${section}.order=${max_order}
 	EOF
 
     echo "$parsed" | while IFS='=' read -r k v; do

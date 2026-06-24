@@ -4,6 +4,8 @@ config global 'global'
 	option mode 'rule'
 	option log_level 'info'
 	option ipv6 '0'
+	option autostart '0'
+	option traffic_stats '1'
 
 config dns 'dns'
 	option enabled '1'

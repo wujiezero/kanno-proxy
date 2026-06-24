@@ -67,3 +67,39 @@ list_node_server_ips() {
         esac
     done | sort -u
 }
+
+# Print unique IPv6 addresses of configured proxy node servers (one per line).
+# Mirrors list_node_server_ips for the IPv6 loop-prevention bypass rules:
+#   - IPv6 literals are emitted as-is (URI square brackets stripped)
+#   - domains are resolved for AAAA records
+#   - IPv4 literals are skipped
+list_node_server_ips6() {
+    local servers s ip
+    servers=$(uci show tomfly 2>/dev/null \
+        | sed -n "s/^tomfly\.proxy_[0-9a-f]*\.server='\([^']*\)'.*/\1/p" \
+        | sort -u)
+    for s in $servers; do
+        [ -z "$s" ] && continue
+        # Strip URI square brackets around IPv6 literals: [2001:db8::1] -> 2001:db8::1
+        s=$(echo "$s" | tr -d '[]')
+        case "$s" in
+        *:*)
+            # IPv6 literal
+            echo "$s"
+            ;;
+        *[a-zA-Z]*)
+            # Domain — resolve AAAA (addresses made of hex digits and colons)
+            for ip in $(nslookup "$s" 223.5.5.5 2>/dev/null \
+                | awk '/^Address[: ]?/{print $NF}' \
+                | grep -E '^[0-9a-fA-F:]+$' \
+                | grep ':' \
+                | grep -v '^::1$'); do
+                echo "$ip"
+            done
+            ;;
+        *)
+            : # IPv4 literal — skip
+            ;;
+        esac
+    done | sort -u
+}

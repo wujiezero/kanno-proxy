@@ -25,6 +25,14 @@
 			"path": "tomfly/nodes"
 		}
 	},
+	"admin/services/tomfly/groups": {
+		"title": "分组",
+		"order": 30,
+		"action": {
+			"type": "view",
+			"path": "tomfly/groups"
+		}
+	},
 	"admin/services/tomfly/rules": {
 		"title": "规则",
 		"order": 40,

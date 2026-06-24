@@ -278,16 +278,28 @@ YAML
         fi
     done
 
-    # Emit all usable proxy nodes
-    while read -r sec; do
-        [ -n "$sec" ] && emit_proxy "$sec"
-    done < /tmp/tomfly_usable.tmp
+    # Sort usable nodes by order, then emit
+    {
+        while read -r sec; do
+            [ -n "$sec" ] || continue
+            local ord; ord=$(_u "${sec}.order"); ord="${ord:-0}"
+            printf '%08d %s\n' "$ord" "$sec"
+        done < /tmp/tomfly_usable.tmp | sort -n | while read -r _ s; do
+            emit_proxy "$s"
+        done
+    }
 
-    # Collect the same usable nodes' names for the auto-group
+    # Collect the same usable nodes' names for the auto-group, sorted by order
     local proxy_names=""
-    while read -r sec; do
-        [ -n "$sec" ] && _u "${sec}.name"
-    done < /tmp/tomfly_usable.tmp > /tmp/tomfly_proxy_names.tmp
+    {
+        while read -r sec; do
+            [ -n "$sec" ] || continue
+            local ord; ord=$(_u "${sec}.order"); ord="${ord:-0}"
+            printf '%08d %s\n' "$ord" "$(_u "${sec}.name")"
+        done < /tmp/tomfly_usable.tmp | sort -n | while read -r _ n; do
+            echo "$n"
+        done
+    } > /tmp/tomfly_proxy_names.tmp
     proxy_names=$(cat /tmp/tomfly_proxy_names.tmp 2>/dev/null)
     rm -f /tmp/tomfly_proxy_names.tmp /tmp/tomfly_usable.tmp
 
@@ -302,7 +314,8 @@ YAML
     fi
 
     # AUTO  = url-test (picks the fastest automatically)
-    # PROXY = select   (what the rules target; user can pin AUTO / a node / DIRECT)
+    # FALLBACK = fallback (tries nodes in order, uses first healthy one)
+    # PROXY = select   (what the rules target; user can pin AUTO / FALLBACK / a node / DIRECT)
     cat <<YAML
 
 proxy-groups:
@@ -313,10 +326,17 @@ ${members}
     url: "http://www.gstatic.com/generate_204"
     interval: 300
     tolerance: 50
+  - name: "FALLBACK"
+    type: fallback
+    proxies:
+${members}
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
   - name: "PROXY"
     type: select
     proxies:
       - "AUTO"
+      - "FALLBACK"
 ${members}
 YAML
     [ -n "$proxy_names" ] && printf '      - DIRECT\n'

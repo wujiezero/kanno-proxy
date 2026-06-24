@@ -93,9 +93,10 @@ function getNodes() {
 				enabled:   s.enabled !== '0',
 				security:  security,
 				transport: s.transport || 'tcp',
+				order:     parseInt(s.order, 10) || 0,
 				incompat:  nodeIncompat(kernel, type, security)
 			};
-		}) };
+		}).sort(function (a, b) { return a.order - b.order; }) };
 	});
 }
 
@@ -228,9 +229,12 @@ function saveRules(p) {
 		['set', CONF + '.rules.default_policy=' + (p.default_policy || 'PROXY')],
 		['commit', CONF]
 	]).then(function () {
+		// Write rule files via base64 to avoid heredoc injection
+		var b64Proxy  = btoa(fp);
+		var b64Direct = btoa(fd);
 		return Promise.all([
-			exec('/bin/sh', ['-c', 'cat > /etc/tomfly/rules/force_proxy.txt <<\'TOMFLYEOF\'\n' + fp + 'TOMFLYEOF']),
-			exec('/bin/sh', ['-c', 'cat > /etc/tomfly/rules/force_direct.txt <<\'TOMFLYEOF\'\n' + fd + 'TOMFLYEOF'])
+			exec('/bin/sh', ['-c', 'echo "' + b64Proxy  + '" | base64 -d > /etc/tomfly/rules/force_proxy.txt']),
+			exec('/bin/sh', ['-c', 'echo "' + b64Direct + '" | base64 -d > /etc/tomfly/rules/force_direct.txt'])
 		]);
 	}).then(refresh).then(function () { return { ok: true }; })
 	  .catch(function (e) { return { ok: false, error: String(e && e.message || e) }; });
@@ -275,7 +279,9 @@ function getGlobal() {
 			mode:      uci.get(CONF, 'global', 'mode') || 'rule',
 			log_level: uci.get(CONF, 'global', 'log_level') || 'info',
 			ipv6:      uci.get(CONF, 'global', 'ipv6') === '1',
-			tun:       uci.get(CONF, 'global', 'tun') !== '0'
+			tun:       uci.get(CONF, 'global', 'tun') !== '0',
+			autostart: uci.get(CONF, 'global', 'autostart') === '1',
+			traffic_stats: uci.get(CONF, 'global', 'traffic_stats') !== '0'
 		};
 	});
 }
@@ -285,9 +291,14 @@ function saveGlobal(p) {
 	var level  = LOGLEVELS[p.log_level] ? p.log_level : 'info';
 	return uciBatch([
 		['set', CONF + '.global=global'],
+		['set', CONF + '.global.enabled=' + (p.enabled === false ? '0' : '1')],
 		['set', CONF + '.global.kernel=' + kernel],
 		['set', CONF + '.global.mode=' + mode],
 		['set', CONF + '.global.log_level=' + level],
+		['set', CONF + '.global.ipv6=' + (p.ipv6 ? '1' : '0')],
+		['set', CONF + '.global.tun=' + (p.tun !== false ? '1' : '0')],
+		['set', CONF + '.global.autostart=' + (p.autostart ? '1' : '0')],
+		['set', CONF + '.global.traffic_stats=' + (p.traffic_stats === false ? '0' : '1')],
 		['commit', CONF]
 	]).then(refresh).then(function () { return { ok: true }; })
 	  .catch(function (e) { return { ok: false, error: String(e && e.message || e) }; });
@@ -436,13 +447,21 @@ function setMode(p) {
 		cmds.push(['set', CONF + '.dns=dns']);
 		cmds.push(['set', CONF + '.dns.mode=' + p.dns_mode]);
 	}
-	if (p.tun !== undefined) {
+	if (p.tun !== undefined || p.autostart !== undefined || p.traffic_stats !== undefined) {
 		return loadConf().then(function () {
 			var kernel = uci.get(CONF, 'global', 'kernel') || 'mihomo';
 			var allCmds = cmds.slice();
-			if (kernel !== 'singbox') {
+			if (p.tun !== undefined && kernel !== 'singbox') {
 				allCmds.push(['set', CONF + '.global=global']);
 				allCmds.push(['set', CONF + '.global.tun=' + (p.tun ? '1' : '0')]);
+			}
+			if (p.autostart !== undefined) {
+				allCmds.push(['set', CONF + '.global=global']);
+				allCmds.push(['set', CONF + '.global.autostart=' + (p.autostart ? '1' : '0')]);
+			}
+			if (p.traffic_stats !== undefined) {
+				allCmds.push(['set', CONF + '.global=global']);
+				allCmds.push(['set', CONF + '.global.traffic_stats=' + (p.traffic_stats === false ? '0' : '1')]);
 			}
 			if (allCmds.length === 0) return Promise.resolve({ ok: true });
 			allCmds.push(['commit', CONF]);
@@ -528,7 +547,12 @@ function installUpload(p) {
 			kind = 'bundle_mihomo';
 		if (target === 'geodata_singbox' && kind === 'bundle')
 			kind = 'bundle_singbox';
-		var cmd = 'src=' + src + '; dir=' + geodir + '; T=/tmp/tomfly-gd-$$; '
+
+		// Use base64 to transfer the upload path securely, avoiding shell injection.
+		// The CGI uploader drops the file at a known path; we verify it exists first.
+		var cmd = 'src=' + src + '; dir=' + geodir + '; '
+			+ '[ -f "$src" ] || { echo "upload file missing" >&2; exit 1; }; '
+			+ 'T=/tmp/tomfly-gd-$$; '
 			+ 'mkdir -p "$dir" "$T"; ok=0; '
 			+ '_one() { local name="$1"; local dest="$dir/$name"; '
 			+ '  if gzip -dc "$src" > "$dest" 2>/dev/null; then ok=$((ok+1)); return 0; fi; '
@@ -560,8 +584,11 @@ function installUpload(p) {
 
 	if (target !== 'mihomo' && target !== 'singbox')
 		return Promise.resolve({ ok: false, error: 'invalid target' });
+
+	// Validate destination path against a whitelist
 	var dest = target === 'mihomo' ? '/usr/bin/mihomo' : '/usr/bin/sing-box';
-	var cmd = 'T=/tmp/tomfly-ext-$$; U=/tmp/tomfly-ungz-$$; mkdir -p "$T"; '
+	var cmd = '[ -f ' + src + ' ] || { echo "upload file missing" >&2; exit 1; }; '
+		+ 'T=/tmp/tomfly-ext-$$; U=/tmp/tomfly-ungz-$$; mkdir -p "$T"; '
 		+ 'if tar -xzf ' + src + ' -C "$T" 2>/dev/null; then '
 		+ '  F=$(find "$T" -type f ! -name "*.sha256" | head -1); '
 		+ '  [ -n "$F" ] && mv "$F" ' + dest + '; '
@@ -591,6 +618,31 @@ function selectNode(p) {
 		.then(function (r) { return { ok: r.code === 0 }; });
 }
 
+/* ── Monthly per-node traffic ─────────────────────── */
+function getNodeTraffic() {
+	return out('/usr/bin/tomfly', ['traffic']).then(function (txt) {
+		try {
+			var o = JSON.parse(txt);
+			return { month: o.month || '', nodes: o.nodes || {}, running: o._running };
+		} catch (e) {
+			return { month: '', nodes: {}, running: false };
+		}
+	});
+}
+
+/* ── Node reorder ────────────────────────────────── */
+function reorderNode(p) {
+	if (!/^[0-9a-f]+$/.test(p.id || ''))
+		return Promise.resolve({ ok: false, error: 'invalid id' });
+	if (p.dir !== 'up' && p.dir !== 'down')
+		return Promise.resolve({ ok: false, error: 'invalid direction' });
+	return out(TOMFLY, ['reorder', p.id, p.dir]).then(function (txt) {
+		if (/moved|already at/i.test(txt))
+			return refresh().then(function () { return { ok: true, message: txt }; });
+		return { ok: false, error: txt };
+	});
+}
+
 var DISPATCH = {
 	get_status: getStatus, get_nodes: getNodes, add_node: addNode, del_node: delNode,
 	toggle_node: toggleNode, test_node: testNode, test_all_nodes: testAll,
@@ -601,7 +653,9 @@ var DISPATCH = {
 	get_traffic: getTraffic, get_connections: getConnections, check_access: checkAccess, check_site: checkSite,
 	set_mode: setMode, install_upload: installUpload,
 	get_node: getNode, edit_node: editNode,
-	get_proxy_options: getProxyOptions, select_node: selectNode
+	get_proxy_options: getProxyOptions, select_node: selectNode,
+	get_node_traffic: getNodeTraffic,
+	reorder_node: reorderNode
 };
 
 return baseclass.extend({

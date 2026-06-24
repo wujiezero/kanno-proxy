@@ -40,6 +40,7 @@ define Package/tomfly-core/install
   $(INSTALL_BIN) ./root/usr/lib/tomfly/gen_singbox.sh $(1)/usr/lib/tomfly/
   $(INSTALL_BIN) ./root/usr/lib/tomfly/nftables.sh   $(1)/usr/lib/tomfly/
   $(INSTALL_BIN) ./root/usr/lib/tomfly/dns.sh        $(1)/usr/lib/tomfly/
+  $(INSTALL_BIN) ./root/usr/lib/tomfly/traffic.sh    $(1)/usr/lib/tomfly/
   $(INSTALL_BIN) ./root/usr/lib/tomfly/updater.sh    $(1)/usr/lib/tomfly/
 
   $(INSTALL_BIN)  ./root/etc/init.d/tomfly $(1)/etc/init.d/

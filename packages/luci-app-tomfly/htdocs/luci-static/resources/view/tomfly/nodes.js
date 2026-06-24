@@ -40,6 +40,10 @@ return view.extend({
 				E('span', { 'class': 'tomfly-lat ' + latClass(n.latency) }, n.latency ? n.latency + 'ms' : '—')
 			]),
 			E('div', { 'class': 'tomfly-actions' }, [
+				E('span', { 'class': 'tomfly-sort-btns' }, [
+					E('button', { 'class': 'cbi-button cbi-button-neutral tomfly-sort-btn', 'title': _('Move up'), 'click': ui.createHandlerFn(this, 'handleReorder', n.id, 'up') }, '▲'),
+					E('button', { 'class': 'cbi-button cbi-button-neutral tomfly-sort-btn', 'title': _('Move down'), 'click': ui.createHandlerFn(this, 'handleReorder', n.id, 'down') }, '▼')
+				]),
 				(n.enabled && !n.incompat) ? E('button', { 'class': 'cbi-button cbi-button-positive', 'click': ui.createHandlerFn(this, 'handleSetActive', n) }, _('Use')) : '',
 				E('button', { 'class': 'cbi-button cbi-button-action', 'click': ui.createHandlerFn(this, 'handleTest', n.id) }, _('Test')),
 				E('button', { 'class': 'cbi-button cbi-button-neutral', 'click': ui.createHandlerFn(this, 'handleEdit', n.id) }, _('Edit')),
@@ -183,6 +187,14 @@ return view.extend({
 		});
 	},
 
+	handleReorder: function (id, dir) {
+		var self = this;
+		return api.call('reorder_node', { id: id, dir: dir }).then(function (r) {
+			if (r && r.ok) return self.reload();
+			ui.addNotification(null, E('p', _('Reorder failed: ') + ((r && r.error) || 'unknown')), 'danger');
+		});
+	},
+
 	handleToggle: function (n) {
 		var self = this;
 		return api.call('toggle_node', { id: n.id, enabled: !n.enabled }).then(function () {
@@ -252,10 +264,15 @@ return view.extend({
 							return api.call('edit_node', { id: id, fields: changed }).then(function (r) {
 								ui.hideModal();
 								if (r && r.ok) {
-									notify(E('p', _('Node updated')), 2500);
+									notify(E('p', _('Node updated — restart proxy to apply')), 3500);
 									return self.reload();
 								}
-								ui.addNotification(null, E('p', _('Save failed')), 'danger');
+								var errMsg = (r && r.error) || _('Save failed — check field values and try again');
+								ui.addNotification(null,
+									E('div', {},
+										E('strong', {}, _('Failed to save node: ')),
+										E('span', {}, errMsg)),
+									'danger');
 							});
 						})
 					}, _('Save'))

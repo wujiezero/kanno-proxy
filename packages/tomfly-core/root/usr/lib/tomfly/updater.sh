@@ -53,6 +53,14 @@ detect_libc() {
     fi
 }
 
+detect_openwrt_arch() {
+    local arch
+    arch=$(. /etc/os-release 2>/dev/null; echo "$OPENWRT_ARCH")
+    [ -n "$arch" ] && { echo "$arch"; return; }
+    arch=$(. /etc/openwrt_release 2>/dev/null; echo "$DISTRIB_ARCH")
+    [ -n "$arch" ] && echo "$arch"
+}
+
 get_latest_release() {
     local repo="$1"
     local tag
@@ -201,11 +209,47 @@ update_singbox() {
     fi
     progress "Latest sing-box: $tag"
 
-    local url
-    # sing-box assets are sing-box-<ver>-<arch>.tar.gz (statically linked Go
-    # binary, so there is no glibc/musl variant to choose).
-    url=$(get_download_url "$SINGBOX_REPO" "$tag" "${arch}\.tar\.gz" | head -1)
-    [ -z "$url" ] && url=$(get_download_url "$SINGBOX_REPO" "$tag" "sing-box-.*-${arch}\.tar\.gz" | head -1)
+    local ver="${tag#v}" openwrt_arch pkg_suffix pkg_url pkg_file
+    openwrt_arch=$(detect_openwrt_arch)
+    if [ -n "$openwrt_arch" ]; then
+        if command -v apk >/dev/null 2>&1; then
+            pkg_suffix="apk"
+        elif command -v opkg >/dev/null 2>&1; then
+            pkg_suffix="ipk"
+        fi
+        if [ -n "$pkg_suffix" ]; then
+            pkg_url=$(get_download_url "$SINGBOX_REPO" "$tag" "sing-box_${ver}_openwrt_${openwrt_arch}\\.${pkg_suffix}" | head -1)
+            if [ -n "$pkg_url" ]; then
+                pkg_file="/tmp/$(basename "$pkg_url")"
+                progress "Selected OpenWrt package: $(basename "$pkg_url")"
+                if curl -fL --max-time 180 --progress-bar -o "$pkg_file" "$pkg_url" 2>&1; then
+                    if [ "$pkg_suffix" = "apk" ]; then
+                        apk add --allow-untrusted "$pkg_file" || log_warn "apk install failed, falling back to tarball"
+                    else
+                        opkg install "$pkg_file" || log_warn "opkg install failed, falling back to tarball"
+                    fi
+                    rm -f "$pkg_file"
+                    if "$SINGBOX_BIN" version >/dev/null 2>&1; then
+                        echo "$tag" > "${TOMFLY_DIR}/singbox.version"
+                        log_info "sing-box updated to $tag"
+                        return 0
+                    fi
+                else
+                    log_warn "OpenWrt package download failed, falling back to tarball"
+                    rm -f "$pkg_file"
+                fi
+            fi
+        fi
+    fi
+
+    local url libc
+    libc=$(detect_libc)
+    if [ "$libc" = "musl" ]; then
+        url=$(get_download_url "$SINGBOX_REPO" "$tag" "${arch}-musl\\.tar\\.gz" | head -1)
+    else
+        url=$(get_download_url "$SINGBOX_REPO" "$tag" "${arch}-glibc\\.tar\\.gz" | head -1)
+    fi
+    [ -z "$url" ] && url=$(get_download_url "$SINGBOX_REPO" "$tag" "sing-box-.*-${arch}\\.tar\\.gz" | grep -v -e '-glibc' -e '-musl' | head -1)
     if [ -z "$url" ]; then
         log_error "No sing-box binary found for arch: $arch (tag: $tag)"
         return 1

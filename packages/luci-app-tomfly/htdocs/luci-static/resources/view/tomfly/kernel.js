@@ -327,6 +327,8 @@ return view.extend({
 			hint = _('For sing-box only. Install to /etc/tomfly/geodata/: geoip-cn.srs + geosite-cn.srs. Download from SagerNet/sing-geoip and sing-geosite (jsDelivr links in README).');
 		} else if (isGeo) {
 			hint = _('Mixed upload — pick the file type below.');
+		} else if (target === 'singbox') {
+			hint = _('Select the sing-box OpenWrt-compatible kernel archive (.gz or .tar.gz). On OpenWrt, use the -musl tarball or Update online.');
 		} else {
 			hint = _('Select the compressed kernel binary (.gz or .tar.gz)');
 		}
@@ -358,6 +360,7 @@ return view.extend({
 						var fd = new FormData();
 						fd.append('sessionid', L.env.sessionid);
 						fd.append('filename', '/tmp/tomfly-upload.bin');
+						fd.append('filemode', '0600');
 						fd.append('filedata', file);
 						return request.post('/cgi-bin/cgi-upload', fd, {
 							timeout: 120000
@@ -366,6 +369,9 @@ return view.extend({
 								throw new Error(res.status === 404
 									? 'cgi-io not available (apk add cgi-io)'
 									: 'HTTP ' + res.status);
+							var upload = res.json();
+							if (upload && upload.failure)
+								throw new Error(upload.message || 'cgi-io upload failed');
 							ui.showModal(_('Installing…'), [
 								E('p', { 'class': 'spinning' }, isGeo
 									? _('Installing geodata…')

@@ -587,16 +587,26 @@ function installUpload(p) {
 
 	// Validate destination path against a whitelist
 	var dest = target === 'mihomo' ? '/usr/bin/mihomo' : '/usr/bin/sing-box';
-	var cmd = '[ -f ' + src + ' ] || { echo "upload file missing" >&2; exit 1; }; '
-		+ 'T=/tmp/tomfly-ext-$$; U=/tmp/tomfly-ungz-$$; mkdir -p "$T"; '
-		+ 'if tar -xzf ' + src + ' -C "$T" 2>/dev/null; then '
-		+ '  F=$(find "$T" -type f ! -name "*.sha256" | head -1); '
-		+ '  [ -n "$F" ] && mv "$F" ' + dest + '; '
-		+ 'elif gzip -d -c ' + src + ' > "$U" 2>/dev/null; then '
-		+ '  mv "$U" ' + dest + '; '
+	var bin = target === 'mihomo' ? 'mihomo' : 'sing-box';
+	var verarg = target === 'mihomo' ? '-v' : 'version';
+	var cmd = 'src=' + src + '; dest=' + dest + '; bin=' + bin + '; verarg=' + verarg + '; '
+		+ '[ -f "$src" ] || { echo "upload file missing" >&2; exit 1; }; '
+		+ 'T=/tmp/tomfly-ext-$$; U=/tmp/tomfly-ungz-$$; old="${dest}.tomfly-old"; mkdir -p "$T"; '
+		+ '[ -f "$dest" ] && cp "$dest" "$old" 2>/dev/null || rm -f "$old"; '
+		+ '_install() { F="$1"; [ -n "$F" ] && [ -f "$F" ] || { echo "no binary found in upload" >&2; exit 1; }; '
+		+ '  cp "$F" "$dest" && chmod +x "$dest" || { echo "install copy failed" >&2; exit 1; }; '
+		+ '  "$dest" "$verarg" >/dev/null 2>&1 && { rm -f "$old"; return 0; }; '
+		+ '  rm -f "$dest"; [ -f "$old" ] && mv "$old" "$dest"; '
+		+ '  echo "uploaded binary not executable on this platform" >&2; exit 1; }; '
+		+ 'if tar -xzf "$src" -C "$T" 2>/dev/null; then '
+		+ '  F=$(find "$T" -type f -name "$bin" | head -1); '
+		+ '  [ -n "$F" ] || F=$(find "$T" -type f ! -name "*.sha256" ! -name "LICENSE*" ! -name "README*" ! -name "*.md" | head -1); '
+		+ '  _install "$F"; '
+		+ 'elif gzip -d -c "$src" > "$U" 2>/dev/null; then '
+		+ '  _install "$U"; '
 		+ 'else '
-		+ '  mv ' + src + ' ' + dest + '; '
-		+ 'fi; chmod +x ' + dest + '; rm -rf ' + src + ' "$T" "$U"';
+		+ '  _install "$src"; '
+		+ 'fi; rm -rf "$src" "$T" "$U"';
 	return exec('/bin/sh', ['-c', cmd]).then(function (r) {
 		if (r.code === 0) return { ok: true };
 		return { ok: false, error: (r.stderr || 'install failed').split('\n')[0] };

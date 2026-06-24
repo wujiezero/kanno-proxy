@@ -27,7 +27,8 @@
 				"/usr/bin/tomfly": [ "exec" ],
 				"/bin/sh": [ "exec" ],
 				"/etc/tomfly/*": [ "read", "write" ],
-			"/var/log/tomfly.log": [ "write" ]
+				"/tmp/tomfly-upload.bin": [ "write" ],
+				"/var/log/tomfly.log": [ "write" ]
 			}
 		}
 	}

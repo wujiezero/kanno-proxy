@@ -28,7 +28,9 @@ load_nftables() {
     nft delete table inet "$NFT_TABLE" 2>/dev/null
 
     local ipv6_block=""
+    local acl_ip6_line=""
     if _ipv6_enabled; then
+        acl_ip6_line="        ip6 saddr @lan_clients6 return"
         ipv6_block="
     set bypass_ip6 {
         type ipv6_addr
@@ -138,7 +140,7 @@ ${ipv6_block}
     chain prerouting_acl {
         type filter hook prerouting priority raw - 10; policy accept;
         ip saddr @lan_clients4 return
-        ip6 saddr @lan_clients6 return
+${acl_ip6_line}
     }
 }
 NFT

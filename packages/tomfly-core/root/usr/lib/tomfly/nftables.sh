@@ -12,6 +12,8 @@ MARK_ROUTE=0x200
 # kernel's DNS lookups and DIRECT connections are never redirected back into
 # tproxy (which would loop infinitely).
 MARK_SELF=768
+# mihomo's redir-port for NAT-based TCP redirect (see prerouting_redirect4 below).
+REDIR_PORT=7892
 
 nft_add() { nft add "$@" 2>/dev/null; }
 
@@ -131,6 +133,31 @@ ${ipv6_block}
         ip daddr @force_proxy_ip4 meta mark set ${MARK_ROUTE}
         ip daddr @cn_ip4 return
         meta l4proto { tcp, udp } meta mark set ${MARK_ROUTE}
+    }
+
+    # IPv4 prerouting NAT: redirect TCP to redir-port.
+    # mihomo's tproxy socket (:::7893) is an IPv6 dual-stack socket, invisible
+    # to nf_tproxy_get_sock_v4's IPv4 hash-table lookup, so tproxy silently
+    # fails for forwarded IPv4 TCP. NAT REDIRECT to redir-port (:::7892) uses
+    # normal TCP delivery, which correctly matches dual-stack listeners.
+    chain prerouting_redirect4 {
+        type nat hook prerouting priority dstnat - 1; policy accept;
+        ip daddr @bypass_ip4 return
+        ip daddr @force_direct_ip4 return
+        ip daddr @force_proxy_ip4 meta l4proto tcp redirect to :${REDIR_PORT}
+        ip daddr @cn_ip4 return
+        meta l4proto tcp redirect to :${REDIR_PORT}
+    }
+
+    # IPv4 output NAT: redirect locally-generated TCP to redir-port.
+    chain output_redirect4 {
+        type nat hook output priority dstnat - 1; policy accept;
+        meta mark ${MARK_SELF} return
+        ip daddr @bypass_ip4 return
+        ip daddr @force_direct_ip4 return
+        ip daddr @force_proxy_ip4 meta l4proto tcp redirect to :${REDIR_PORT}
+        ip daddr @cn_ip4 return
+        meta l4proto tcp redirect to :${REDIR_PORT}
     }
 
     # LAN access-control: drop proxy-eligible traffic from excluded clients.

@@ -3,12 +3,26 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 PARSER="${ROOT}/packages/tomfly-core/root/usr/lib/tomfly/uri_parser.sh"
+TMP=${TMPDIR:-/tmp}/tomfly-uri-test-$$
+trap 'rm -rf "$TMP"' EXIT
 
 run_parser() {
     (
         sed 's|^\. /usr/lib/tomfly/common.sh$|log_error() { echo "$*" >&2; }|' "$PARSER"
         printf '\nparse_uri "$1"\n'
     ) | sh -s -- "$1"
+}
+
+run_parser_without_base64() {
+    mkdir -p "$TMP/bin"
+    for c in awk cat cut grep head sed seq tr; do
+        p=$(command -v "$c")
+        [ -n "$p" ] && ln -sf "$p" "$TMP/bin/$c"
+    done
+    (
+        sed 's|^\. /usr/lib/tomfly/common.sh$|log_error() { echo "$*" >&2; }|' "$PARSER"
+        printf '\nPATH="$2" parse_uri "$1"\n'
+    ) | sh -s -- "$1" "$TMP/bin"
 }
 
 assert_line() {
@@ -29,6 +43,12 @@ assert_line "$actual" 'port=443'
 assert_line "$actual" 'uuid=C70A57B2-51EF-4AAF-A492-1092727C6E08'
 assert_line "$actual" 'encryption=auto'
 assert_line "$actual" 'flow=xtls-rprx-vision'
+assert_line "$actual" 'security=reality'
+
+actual=$(run_parser_without_base64 "$legacy_vless")
+assert_line "$actual" 'server=69.63.211.8'
+assert_line "$actual" 'port=443'
+assert_line "$actual" 'uuid=C70A57B2-51EF-4AAF-A492-1092727C6E08'
 assert_line "$actual" 'security=reality'
 assert_line "$actual" 'sni=www.cooper.edu'
 assert_line "$actual" 'fp=chrome'

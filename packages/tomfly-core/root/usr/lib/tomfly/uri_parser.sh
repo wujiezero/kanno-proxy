@@ -29,12 +29,42 @@ _qget() {
 }
 
 _b64_decode() {
-    local b64="$1" pad
+    local b64="$1" pad out
 
     b64=$(echo "$b64" | tr '_-' '/+')
     pad=$(( 4 - ${#b64} % 4 ))
     [ "$pad" -ne 4 ] && b64="${b64}$(printf '=%.0s' $(seq 1 $pad))"
-    echo "$b64" | base64 -d 2>/dev/null
+    if command -v base64 >/dev/null 2>&1; then
+        out=$(echo "$b64" | base64 -d 2>/dev/null) && { printf '%s\n' "$out"; return; }
+    fi
+    echo "$b64" | awk '
+    function val(c) {
+        p = index("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", c)
+        return p ? p - 1 : -1
+    }
+    function pow2(n, p) {
+        p = 1
+        while (n-- > 0) p *= 2
+        return p
+    }
+    {
+        buf = 0; bits = 0
+        for (i = 1; i <= length($0); i++) {
+            c = substr($0, i, 1)
+            if (c == "=") break
+            v = val(c)
+            if (v < 0) continue
+            buf = buf * 64 + v
+            bits += 6
+            while (bits >= 8) {
+                bits -= 8
+                div = pow2(bits)
+                byte = int(buf / div)
+                printf "%c", byte
+                buf -= byte * div
+            }
+        }
+    }'
 }
 
 # Split host:port on LAST colon (POSIX, no 'rev')

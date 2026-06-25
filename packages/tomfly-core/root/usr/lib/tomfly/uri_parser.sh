@@ -28,6 +28,15 @@ _qget() {
         { read v; urldecode "$v"; }
 }
 
+_b64_decode() {
+    local b64="$1" pad
+
+    b64=$(echo "$b64" | tr '_-' '/+')
+    pad=$(( 4 - ${#b64} % 4 ))
+    [ "$pad" -ne 4 ] && b64="${b64}$(printf '=%.0s' $(seq 1 $pad))"
+    echo "$b64" | base64 -d 2>/dev/null
+}
+
 # Split host:port on LAST colon (POSIX, no 'rev')
 _hostport() {
     _HP_HOST=${1%:*}
@@ -36,30 +45,73 @@ _hostport() {
 
 parse_vless() {
     local uri="$1"
-    local frag body userhost params uuid host port
+    local frag body authority decoded userhost params uuid host port
+    local encryption flow security sni fp pbk sid tls xtls
 
-    frag=$(echo "$uri" | sed 's/.*#//')
-    frag=$(urldecode "$frag")
+    case "$uri" in
+        *#*) frag=$(echo "$uri" | sed 's/.*#//'); frag=$(urldecode "$frag") ;;
+        *)   frag="" ;;
+    esac
     body=$(echo "$uri" | sed 's/#.*//' | sed 's|^vless://||')
+    case "$body" in
+        *\?*) authority=${body%%\?*}; params=${body#*\?} ;;
+        *)    authority=$body; params="" ;;
+    esac
 
-    uuid=$(echo "$body" | cut -d'@' -f1)
-    userhost=$(echo "$body" | cut -d'@' -f2-)
-    _hostport "$(echo "$userhost" | cut -d'?' -f1)"
+    case "$authority" in
+        *@*) ;;
+        *)
+            decoded=$(_b64_decode "$authority")
+            case "$decoded" in *@*) authority=$decoded ;; esac
+            ;;
+    esac
+
+    uuid=${authority%%@*}
+    userhost=${authority#*@}
+    encryption=$(_qget "$params" encryption)
+    case "$uuid" in
+        *:*)
+            [ -z "$encryption" ] && encryption=${uuid%%:*}
+            uuid=${uuid#*:}
+            ;;
+    esac
+
+    _hostport "$userhost"
     host=$_HP_HOST; port=$_HP_PORT
-    params=$(echo "$userhost" | grep -o '?.*' | cut -c2-)
+
+    [ -n "$frag" ] || frag=$(_qget "$params" remarks)
+    [ -n "$frag" ] || frag=$(_qget "$params" name)
+    flow=$(_qget "$params" flow)
+    xtls=$(_qget "$params" xtls)
+    [ -z "$flow" ] && [ "$xtls" = "2" ] && flow="xtls-rprx-vision"
+    pbk=$(_qget "$params" pbk)
+    sid=$(_qget "$params" sid)
+    security=$(_qget "$params" security)
+    tls=$(_qget "$params" tls)
+    if [ -z "$security" ]; then
+        if [ -n "$pbk" ] || [ "$xtls" = "2" ]; then
+            security="reality"
+        elif [ "$tls" = "1" ] || [ "$tls" = "true" ] || [ "$tls" = "tls" ]; then
+            security="tls"
+        fi
+    fi
+    sni=$(_qget "$params" sni)
+    [ -n "$sni" ] || sni=$(_qget "$params" peer)
+    fp=$(_qget "$params" fp)
+    [ -n "$fp" ] || fp=$(_qget "$params" fingerprint)
 
     echo "type=vless"
     echo "name=$frag"
     echo "server=$host"
     echo "port=$port"
     echo "uuid=$uuid"
-    echo "encryption=$(_qget "$params" encryption)"
-    echo "flow=$(_qget "$params" flow)"
-    echo "security=$(_qget "$params" security)"
-    echo "sni=$(_qget "$params" sni)"
-    echo "fp=$(_qget "$params" fp)"
-    echo "pbk=$(_qget "$params" pbk)"
-    echo "sid=$(_qget "$params" sid)"
+    echo "encryption=$encryption"
+    echo "flow=$flow"
+    echo "security=$security"
+    echo "sni=$sni"
+    echo "fp=$fp"
+    echo "pbk=$pbk"
+    echo "sid=$sid"
     echo "transport=$(_qget "$params" type)"
     echo "transport_host=$(_qget "$params" host)"
     echo "transport_path=$(_qget "$params" path)"
